@@ -610,7 +610,7 @@ export const ConsolaDepartamental: React.FC<ConsolaDepartamentalProps> = ({ usua
                 Visualizador de Base Maestra de Google Sheets
               </h2>
               <p className="text-xs text-[#94a3b8]">
-                Estructura exacta sincronizada con el archivo <code className="text-[#fbbf24]">12jI-w438vLDio35BYNinvNDYtFd6CZVa5Z_a_RRGY4M</code>
+                Estructura exacta sincronizada con el archivo <code className="text-[#fbbf24]">{CONFIG.MASTER_SPREADSHEET_ID}</code> ({CONFIG.DENOMINACION_BASE_MAESTRA})
               </p>
             </div>
 

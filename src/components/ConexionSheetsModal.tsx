@@ -81,23 +81,45 @@ export const ConexionSheetsModal: React.FC<ConexionSheetsModalProps> = ({ onCerr
   };
 
   const snippetApiAppsScript = `// ============================================================
-// AGREGAR AL FINAL DE TU GOOGLE APPS SCRIPT (.gs) PARA API WEB GLOBAL
+// SISTEMA INSTITUCIONAL DE MOVIMIENTO, SALUD Y BIENESTAR 1.1
+// Escuela Normal "Miguel F. Martínez" - Depto. Deporte y Salud
+// Base Maestra: ${CONFIG.DENOMINACION_BASE_MAESTRA}
+// Master Spreadsheet ID: ${CONFIG.MASTER_SPREADSHEET_ID}
 // ============================================================
+
+function msb_getHojaSegura(ss, nombreHoja, encabezadosPorDefecto) {
+  var hoja = ss.getSheetByName(nombreHoja);
+  if (!hoja) {
+    hoja = ss.insertSheet(nombreHoja);
+    if (encabezadosPorDefecto && encabezadosPorDefecto.length) {
+      hoja.appendRow(encabezadosPorDefecto);
+    }
+  }
+  return hoja;
+}
+
 function doGet(e) {
-  const ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
-  const action = (e && e.parameter) ? e.parameter.action : '';
+  var ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
+  var action = (e && e.parameter) ? e.parameter.action : '';
 
   if (action === 'ping') {
-    return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Conectado a BASE_MAESTRA 1.1' }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ 
+      ok: true, 
+      mensaje: 'Conectado a ${CONFIG.DENOMINACION_BASE_MAESTRA}',
+      spreadsheetId: '${CONFIG.MASTER_SPREADSHEET_ID}'
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 
   if (action === 'obtenerTodo') {
-    const actHoja = ss.getSheetByName('Actividades');
-    const espHoja = ss.getSheetByName('Espacios');
-    const invHoja = ss.getSheetByName('Inventario');
-    const solHoja = ss.getSheetByName('Solicitudes');
-    const insHoja = ss.getSheetByName('Inscripciones_Asistencia');
+    var actHoja = msb_getHojaSegura(ss, 'Actividades', ['ID_actividad','Nombre','Descripción','Tipo','Cupo']);
+    var espHoja = msb_getHojaSegura(ss, 'Espacios', ['ID_espacio','Nombre','Ubicación','Capacidad']);
+    var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoría','Estado']);
+    var solHoja = msb_getHojaSegura(ss, 'Solicitudes', ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones']);
+    var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
+    var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+    var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
+    var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','idActividad','nombreActividad','categoria','p1_satisfaccionGeneral','p2_calidadInstalaciones','p3_desempenoEncargado','p4_cumplimientoHorarios','p5_ambienteConvivencia','p6_beneficioSalud','p7_recomendariaActividad','comentarios','fechaEvaluacion','idUsuario','nombreUsuario']);
+    var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas', ['idEvaluacion','idParticipante','nombreParticipante','fechaRegistro','puntuacionGeneral','categoriaRendimiento','inicial_json','final_json']);
 
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
@@ -105,7 +127,11 @@ function doGet(e) {
       espacios: msb_getAllObjects(espHoja, msb_getHeaders(espHoja)),
       inventario: msb_getAllObjects(invHoja, msb_getHeaders(invHoja)),
       solicitudes: msb_getAllObjects(solHoja, msb_getHeaders(solHoja)),
-      inscripciones: msb_getAllObjects(insHoja, msb_getHeaders(insHoja))
+      inscripciones: msb_getAllObjects(insHoja, msb_getHeaders(insHoja)),
+      galeria: msb_getAllObjects(galHoja, msb_getHeaders(galHoja)),
+      identidades: msb_getAllObjects(idHoja, msb_getHeaders(idHoja)),
+      evaluaciones: msb_getAllObjects(evHoja, msb_getHeaders(evHoja)),
+      pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja))
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -115,38 +141,89 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
-    const postData = JSON.parse(e.postData.contents);
-    const action = postData.action;
+    var ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
+    var postData = JSON.parse(e.postData.contents);
+    var action = postData.action;
 
+    // 1. Guardar Solicitud F02
     if (action === 'guardarSolicitud' && postData.solicitud) {
-      const solHoja = ss.getSheetByName('Solicitudes');
-      const s = postData.solicitud;
+      var solHoja = msb_getHojaSegura(ss, 'Solicitudes');
+      var s = postData.solicitud;
       solHoja.appendRow([
         s.ID_solicitud, s.Fecha_solicitud, s.Solicitante_ID, s.Solicitante_Nombre,
         s.Solicitante_Rol, s.Nivel_prioridad, s.Prioridad_Etiqueta, s.Tipo_solicitud,
         s.ID_recurso, s.Recurso_Nombre, s.Fecha_uso, s.Hora_inicio, s.Hora_fin,
         s.Cantidad, s.Proposito, s.Estado, s.Revisado_por_ID, s.Fecha_resolucion, s.Motivo_observaciones
       ]);
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Solicitud sincronizada' }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Solicitud sincronizada' })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 2. Guardar Inscripción F01
     if (action === 'guardarInscripcion' && postData.inscripcion) {
-      const insHoja = ss.getSheetByName('Inscripciones_Asistencia');
-      const ins = postData.inscripcion;
+      var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia');
+      var ins = postData.inscripcion;
       insHoja.appendRow([
         ins.ID_registro, ins.ID_actividad, ins.ID_participante, ins.Fecha_inscripción,
         ins.Estado_inscripcion, ins.Asistencia || 'No registrada', ins.Fecha_asistencia || '', ins.Observaciones || ''
       ]);
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Inscripción sincronizada' }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Inscripción sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3. Guardar / Sincronizar Galería Completa (Fotos y Videos para todas las computadoras)
+    if (action === 'guardarGaleria' && Array.isArray(postData.galeria)) {
+      var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      galHoja.clearContents();
+      galHoja.appendRow(['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      postData.galeria.forEach(function(g) {
+        galHoja.appendRow([
+          g.id || '', g.titulo || '', g.descripcion || '', g.fecha || '', g.categoria || '',
+          g.url || '', g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
+        ]);
+      });
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Galería sincronizada globalmente' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 4. Guardar Identidad / Nuevo Usuario Registrado
+    if (action === 'guardarIdentidad' && postData.identidad) {
+      var idHoja = msb_getHojaSegura(ss, 'Identidades');
+      var u = postData.identidad;
+      idHoja.appendRow([
+        u.id, u.username, u.pinHash, u.nombre, u.apellidos, u.sector, u.correo,
+        u.tipoCuenta, u.estado, u.consentimiento, u.fechaAlta, u.rol,
+        u.licenciatura || '', u.semestre || '', u.grupo || '', u.observaciones || ''
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Identidad sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 5. Guardar Evaluación de Servicio
+    if (action === 'guardarEvaluacion' && postData.evaluacion) {
+      var evHoja = msb_getHojaSegura(ss, 'Evaluaciones');
+      var ev = postData.evaluacion;
+      evHoja.appendRow([
+        ev.idRespuesta, ev.idActividad, ev.nombreActividad, ev.categoria,
+        ev.p1_satisfaccionGeneral, ev.p2_calidadInstalaciones, ev.p3_desempenoEncargado,
+        ev.p4_cumplimientoHorarios, ev.p5_ambienteConvivencia, ev.p6_beneficioSalud,
+        ev.p7_recomendariaActividad, ev.comentarios || '', ev.fechaEvaluacion,
+        'ANONIMO', 'Participante Anónimo'
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Evaluación sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 6. Guardar Pruebas Físicas
+    if (action === 'guardarEvaluacionFisica' && postData.evaluacion) {
+      var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas');
+      var pf = postData.evaluacion;
+      pfHoja.appendRow([
+        pf.idEvaluacion, pf.idParticipante, pf.nombreParticipante, pf.fechaRegistro,
+        pf.puntuacionGeneral || 0, pf.categoriaRendimiento || '',
+        JSON.stringify(pf.inicial || {}), JSON.stringify(pf.final || {})
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Prueba física sincronizada' })).setMimeType(ContentService.MimeType.JSON);
     }
 
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
 }`;
 

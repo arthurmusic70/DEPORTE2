@@ -25,10 +25,11 @@ export const CONFIG = {
   SISTEMA: 'Sistema Institucional de Movimiento, Salud y Bienestar',
   DEPARTAMENTO: 'Departamento de Deporte y Salud',
   SUBDIRECCION: 'Subdirección de Servicios Estudiantiles',
-  MASTER_SPREADSHEET_ID: '12jI-w438vLDio35BYNinvNDYtFd6CZVa5Z_a_RRGY4M',
+  MASTER_SPREADSHEET_ID: '18CchbQkwcc_L0RiyDUGYclIKErQODdAhKWQDW7VKu0Y',
+  DENOMINACION_BASE_MAESTRA: 'BASE_MAESTRA_MOVIMIENTO_SALUD_BIENESTAR 1.1',
   RESPONSE_SPREADSHEET_ID: '1JfKniHV6va57ron5Q-1bQy5HU-BW_cxw0V_CsbxuEUQ',
   HOJA_CONTROL: 'Control_Formularios',
-  URL_MASTER_SHEET: 'https://docs.google.com/spreadsheets/d/12jI-w438vLDio35BYNinvNDYtFd6CZVa5Z_a_RRGY4M/edit',
+  URL_MASTER_SHEET: 'https://docs.google.com/spreadsheets/d/18CchbQkwcc_L0RiyDUGYclIKErQODdAhKWQDW7VKu0Y/edit',
   URL_RESPONSES_SHEET: 'https://docs.google.com/spreadsheets/d/1JfKniHV6va57ron5Q-1bQy5HU-BW_cxw0V_CsbxuEUQ/edit',
   DEFAULT_APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycby5fN-jRrDLORbh06V2Zf0kWOzHevf_pX96LWoSbWBMbeDNL_4ml4TAcpkx_zZdWk_C/exec'
 };
@@ -1323,6 +1324,7 @@ export class MSBDatabase {
       list.push(finalItem);
     }
     setStored('EVALUACIONES_CAPACIDADES_FISICAS_V2', list);
+    this.postToGoogleSheets({ action: 'guardarEvaluacionFisica', evaluacion: finalItem });
     return finalItem;
   }
 
@@ -1650,6 +1652,7 @@ export class MSBDatabase {
 
     identidades.push(nuevaIdentidad);
     this.saveIdentidades(identidades);
+    this.postToGoogleSheets({ action: 'guardarIdentidad', identidad: nuevaIdentidad });
 
     return {
       ok: true,
@@ -2067,6 +2070,7 @@ export class MSBDatabase {
     };
     list.unshift(nueva);
     setStored('RESPUESTAS_ENCUESTAS', list);
+    this.postToGoogleSheets({ action: 'guardarEvaluacion', evaluacion: nueva });
     return { ok: true, idRespuesta, mensaje: '✓ Evaluación anónima registrada exitosamente. ¡Gracias por tu valiosa retroalimentación!' };
   }
 
@@ -2105,6 +2109,7 @@ export class MSBDatabase {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('msb_galeria_actualizada'));
     }
+    this.postToGoogleSheets({ action: 'guardarGaleria', galeria: fotos });
   }
 
   static agregarImagenActividad(nueva: Omit<ImagenActividad, 'id'>): { ok: boolean; id: string; mensaje: string } {
@@ -2331,10 +2336,37 @@ export class MSBDatabase {
         if (Array.isArray(data.inscripciones)) this.saveInscripciones(data.inscripciones);
         if (Array.isArray(data.identidades) && data.identidades.length > 0) this.saveIdentidades(data.identidades);
         
+        // Sincronización comunitaria de Galería (Fotos y Videos visibles en todos los dispositivos)
+        if (Array.isArray(data.galeria) && data.galeria.length > 0) {
+          setStored('GALERIA_ACTIVIDADES', data.galeria);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('msb_galeria_actualizada'));
+          }
+        }
+
+        // Sincronización de Evaluaciones y Pruebas Físicas
+        if (Array.isArray(data.evaluaciones) && data.evaluaciones.length > 0) {
+          setStored('RESPUESTAS_ENCUESTAS', data.evaluaciones);
+        }
+        if (Array.isArray(data.pruebas_fisicas) && data.pruebas_fisicas.length > 0) {
+          this.saveEvaluacionesFisicas(data.pruebas_fisicas);
+        }
+        if (Array.isArray(data.sesiones_asistencia) && data.sesiones_asistencia.length > 0) {
+          setStored('SESIONES_ASISTENCIA', data.sesiones_asistencia);
+        }
+        
+        // Sincronización del Escudo / Sello Oficial Institucional
+        if (data.escudoActivo && data.escudoActivo.url) {
+          setStored('MSB_ESCUDO_ACTIVO', data.escudoActivo);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('msb_escudo_cambiado', { detail: data.escudoActivo }));
+          }
+        }
+        
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('msb_datos_actualizados'));
         }
-        return { ok: true, mensaje: 'Datos sincronizados exitosamente con Google Sheets 1.1' };
+        return { ok: true, mensaje: 'Datos sincronizados exitosamente con BASE_MAESTRA_MOVIMIENTO_SALUD_BIENESTAR 1.1' };
       }
       return { ok: false, mensaje: data?.mensaje || 'Respuesta inválida del servidor.' };
     } catch (err: any) {
@@ -2353,12 +2385,13 @@ export class MSBDatabase {
         live 
           ? '🟢 MODO EN VIVO: Conectado a Google Apps Script Web App' 
           : '🟡 MODO LOCAL: Almacenamiento local con esquema 1:1 de Base Maestra 1.1',
-        `✓ BASE MAESTRA GOOGLE SHEETS: ID 12jI-w438vLDio35BYNinvNDYtFd6CZVa5Z_a_RRGY4M`,
-        `✓ ARCHIVO RESPUESTAS FORMULARIOS: ID 1JfKniHV6va57ron5Q-1bQy5HU-BW_cxw0V_CsbxuEUQ`,
+        `✓ BASE MAESTRA GOOGLE SHEETS: ID ${CONFIG.MASTER_SPREADSHEET_ID} (${CONFIG.DENOMINACION_BASE_MAESTRA})`,
+        `✓ ARCHIVO RESPUESTAS FORMULARIOS: ID ${CONFIG.RESPONSE_SPREADSHEET_ID}`,
         '✓ Jerarquía de Prioridad: 0-Dirección | 1-Deportiva | 2-Docente | 3-Comunidad',
         '✓ Regla de Asistencia: Validación automática con umbral mínimo del 85%',
         '✓ Modos de Asistencia: Sincrónico (en vivo) y Matriz Calendario (fecha por fecha)',
         '✓ Perfiles Activos: Administrador (Consola exclusiva), Encargados, Docentes, Estudiantes, Trabajadores, Dirección',
+        '✓ Galería y Difusión Comunitaria: Sincronización en la nube entre todas las terminales y dispositivos',
         '✓ Algoritmo Criptográfico: SHA-256 Web Crypto API (100% compatible con Utilities.computeDigest)',
         '✓ Protección de Datos y Privacidad: Conforme a Normas ISO/IEC 27701:2019 e ISO/IEC 27001:2022 y LGPDPPSO (Cifrado SHA-256, Control RBAC, No Transferencia de Datos)'
       ]
@@ -2394,6 +2427,7 @@ export class MSBDatabase {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('msb_escudo_cambiado', { detail: payload }));
     }
+    this.postToGoogleSheets({ action: 'guardarEscudo', escudo: payload });
     return { ok: true, mensaje: 'Escudo actualizado exitosamente.' };
   }
 
@@ -2589,7 +2623,7 @@ export class MSBDatabase {
       estado: isLive ? 'ok' : 'advertencia',
       detalle: isLive 
         ? 'Conectado a Google Apps Script Web App en producción.' 
-        : 'Esquema local preparado 1:1 con ID 12jI-w438vLDio35BYNinvNDYtFd6CZVa5Z_a_RRGY4M listo para sincronizar.'
+        : `Esquema local preparado 1:1 con ID ${CONFIG.MASTER_SPREADSHEET_ID} listo para sincronizar.`
     });
 
     // 6. Confidencialidad y Anonimato ISO

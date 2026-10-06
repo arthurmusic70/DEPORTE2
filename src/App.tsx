@@ -40,6 +40,25 @@ export default function App() {
         console.warn('Sincronización inicial Sheets:', err);
       });
     }
+
+    // Sincronización continua en segundo plano (cada 25s y al retomar el foco de la ventana)
+    const interval = setInterval(() => {
+      if (MSBDatabase.isLiveConnected()) {
+        MSBDatabase.syncFromGoogleSheets().catch(() => {});
+      }
+    }, 25000);
+
+    const handleFocus = () => {
+      if (MSBDatabase.isLiveConnected()) {
+        MSBDatabase.syncFromGoogleSheets().catch(() => {});
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const handleLoginExitoso = (user: SesionUsuario) => {
