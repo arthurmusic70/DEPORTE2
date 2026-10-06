@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@layer base {
+  *, ::before, ::after {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    background-color: #040e1c !important;
+    color: #f8fafc;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  #root {
+    background-color: #040e1c;
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom scrollbars for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #040e1c;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e3a8a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2563eb;
+}
+
+/* ================= REGLAS OFICIALES DE IMPRESIÓN ================= */
+@media print {
+  html, body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ocultar la aplicación completa cuando se imprime un documento entregable */
+  body.msb-printing-active #root,
+  body.msb-printing-active > *:not(#msb-print-container):not(#msb-print-root) {
+    display: none !important;
+  }
+
+  /* Mostrar exclusivamente el contenedor del documento oficial */
+  #msb-print-container,
+  #msb-print-root {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  @page {
+    size: letter portrait;
+    margin: 1.2cm 1.4cm;
+  }
+}
+

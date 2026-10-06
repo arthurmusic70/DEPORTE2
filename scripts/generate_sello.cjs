@@ -1,0 +1,185 @@
+const fs = require('fs');
+const path = require('path');
+const sharp = require('sharp');
+
+// Create exact high-fidelity SVG of the official institutional seal of Centenaria y Benemérita Escuela Normal Miguel F. Martínez
+const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
+  <defs>
+    <!-- Text paths for outer circular text -->
+    <path id="top-arc" d="M 68,300 A 232,232 0 1,1 532,300" fill="none" />
+    <path id="bottom-arc" d="M 532,300 A 232,232 0 0,1 68,300" fill="none" />
+    <path id="shield-left-text-path" d="M 175,200 C 150,290 178,380 250,448" fill="none" />
+    <path id="shield-right-text-path" d="M 425,200 C 450,290 422,380 350,448" fill="none" />
+  </defs>
+
+  <!-- Background White Circle -->
+  <circle cx="300" cy="300" r="294" fill="#ffffff" stroke="#000000" stroke-width="7" />
+  <circle cx="300" cy="300" r="284" fill="#ffffff" stroke="#000000" stroke-width="3" />
+
+  <!-- Outer Ring Inner Border -->
+  <circle cx="300" cy="300" r="202" fill="#0022cc" stroke="#000000" stroke-width="6" />
+
+  <!-- Top Text: ESCUELA CENTENARIA in Red Serif -->
+  <text fill="#d60000" stroke="#880000" stroke-width="0.5" font-family="'Times New Roman', 'Georgia', serif" font-weight="900" font-size="52" letter-spacing="5">
+    <textPath href="#top-arc" startOffset="50%" text-anchor="middle">
+      ESCUELA CENTENARIA
+    </textPath>
+  </text>
+
+  <!-- Bottom Text: BENEMERITA in Red Serif -->
+  <text fill="#d60000" stroke="#880000" stroke-width="0.5" font-family="'Times New Roman', 'Georgia', serif" font-weight="900" font-size="54" letter-spacing="9">
+    <textPath href="#bottom-arc" startOffset="50%" text-anchor="middle">
+      BENEMERITA
+    </textPath>
+  </text>
+
+  <!-- Horizontal Boxes for 1870 and 1970 -->
+  <!-- Left Box: 1870 -->
+  <g>
+    <rect x="18" y="265" width="168" height="70" fill="#ffffff" stroke="#000000" stroke-width="6" />
+    <text x="102" y="318" text-anchor="middle" fill="#000000" font-family="'Times New Roman', serif" font-weight="900" font-size="52" letter-spacing="2">
+      1870
+    </text>
+  </g>
+
+  <!-- Right Box: 1970 -->
+  <g>
+    <rect x="414" y="265" width="168" height="70" fill="#ffffff" stroke="#000000" stroke-width="6" />
+    <text x="498" y="318" text-anchor="middle" fill="#000000" font-family="'Times New Roman', serif" font-weight="900" font-size="52" letter-spacing="2">
+      1970
+    </text>
+  </g>
+
+  <!-- Blue Background Inside Shield -->
+  <!-- Center Shield Elements -->
+  
+  <!-- Back Red Ribbon at top of shield: LUX PAX VIS -->
+  <path d="M 180 162 L 300 128 L 420 162 L 405 204 L 195 204 Z" fill="#d60000" stroke="#000000" stroke-width="4" />
+
+  <!-- Shield Body Outer Yellow Border -->
+  <path d="M 172 172 
+           C 220 198 380 198 428 172
+           C 450 310 405 405 300 488
+           C 195 405 150 310 172 172 Z"
+        fill="#ffea00" stroke="#000000" stroke-width="6" />
+
+  <!-- Top Crown Tripartite Banner Red Header -->
+  <path d="M 195 146 
+           C 240 185 360 185 405 146 
+           L 426 174 
+           C 360 206 240 206 174 174 Z"
+        fill="#d60000" stroke="#000000" stroke-width="4" />
+
+  <!-- Words LUX PAX VIS on the top crest banner -->
+  <g font-family="'Times New Roman', serif" font-weight="900" font-size="28" fill="#ffea00" stroke="#000000" stroke-width="1.2">
+    <text x="232" y="190" text-anchor="middle">LUX</text>
+    <line x1="262" y1="162" x2="262" y2="202" stroke="#000000" stroke-width="3" />
+    <text x="300" y="192" text-anchor="middle">PAX</text>
+    <line x1="338" y1="162" x2="338" y2="202" stroke="#000000" stroke-width="3" />
+    <text x="368" y="190" text-anchor="middle">VIS</text>
+  </g>
+
+  <!-- Inner White Field of Shield -->
+  <path d="M 196 200 
+           C 240 220 360 220 404 200
+           C 424 316 388 388 300 458
+           C 212 388 176 316 196 200 Z"
+        fill="#ffffff" stroke="#000000" stroke-width="5" />
+
+  <!-- Center Circle behind the Torch -->
+  <circle cx="300" cy="268" r="48" fill="#ffffff" stroke="#000000" stroke-width="4" />
+
+  <!-- Normalist Torch (Antorcha del Saber) -->
+  <!-- Torch Handle / Column -->
+  <rect x="294" y="295" width="12" height="135" fill="#ffea00" stroke="#000000" stroke-width="3.5" />
+  <circle cx="300" cy="436" r="8" fill="#ffea00" stroke="#000000" stroke-width="3.5" />
+
+  <!-- Torch Cup / Bowl -->
+  <path d="M 264 268 L 336 268 L 324 295 L 276 295 Z" fill="#ffea00" stroke="#000000" stroke-width="4" />
+  <line x1="258" y1="268" x2="342" y2="268" stroke="#000000" stroke-width="5" />
+
+  <!-- Golden Flame -->
+  <path d="M 300 212 
+           C 280 230 274 246 280 258
+           C 285 266 294 266 300 262
+           C 306 266 315 266 320 258
+           C 326 246 320 230 300 212 Z"
+        fill="#ffea00" stroke="#000000" stroke-width="3.5" />
+  <!-- Flame Inner Details -->
+  <path d="M 300 224 
+           C 290 238 288 248 294 256
+           C 297 260 303 260 306 256
+           C 312 248 310 238 300 224 Z"
+        fill="#ffe100" stroke="#c48a00" stroke-width="1.5" />
+
+  <!-- Diagonal Curving Ribbon: NORMAL -->
+  <g>
+    <!-- Yellow Ribbon Shape Across Shield -->
+    <path d="M 180 376 
+             C 240 330 360 250 422 216 
+             L 426 266 
+             C 360 300 240 380 176 426 Z"
+          fill="#ffea00" stroke="#000000" stroke-width="5" />
+    
+    <!-- Bold Red Letters NORMAL -->
+    <g transform="rotate(-23 300 326)">
+      <text x="300" y="342" text-anchor="middle" fill="#d60000" stroke="#000000" stroke-width="1" font-family="'Arial Black', 'Impact', sans-serif" font-weight="900" font-size="54" letter-spacing="3">
+        NORMAL
+      </text>
+    </g>
+  </g>
+
+  <!-- Left Shield Yellow Border Text: MIGUEL F. MARTINEZ -->
+  <text fill="#d60000" font-family="'Times New Roman', serif" font-weight="900" font-size="20" letter-spacing="2.5">
+    <textPath href="#shield-left-text-path" startOffset="14%">
+      MIGUEL F. MARTINEZ
+    </textPath>
+  </text>
+
+  <!-- Right Shield Yellow Border Text: MONTERREY, N. L., MEX. -->
+  <text fill="#d60000" font-family="'Times New Roman', serif" font-weight="900" font-size="19" letter-spacing="2">
+    <textPath href="#shield-right-text-path" startOffset="14%">
+      MONTERREY, N. L., MEX.
+    </textPath>
+  </text>
+
+  <!-- Bottom Dot / Rivet at Shield Point -->
+  <circle cx="300" cy="472" r="7" fill="#000000" />
+</svg>
+`;
+
+async function main() {
+  const publicDir = path.join(__dirname, '..', 'public');
+  const assetsDir = path.join(__dirname, '..', 'src', 'assets');
+  if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
+  if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+
+  const svgPath = path.join(publicDir, 'SELLO.svg');
+  fs.writeFileSync(svgPath, svgContent, 'utf-8');
+  console.log('Saved SVG to:', svgPath);
+
+  // Generate crisp PNGs (512x512 and 1024x1024)
+  const png512Buffer = await sharp(Buffer.from(svgContent))
+    .resize(512, 512)
+    .png({ quality: 100 })
+    .toBuffer();
+
+  const publicPngPath = path.join(publicDir, 'SELLO.png');
+  const publicPngLower = path.join(publicDir, 'sello.png');
+  const assetsPngPath = path.join(assetsDir, 'SELLO.png');
+
+  fs.writeFileSync(publicPngPath, png512Buffer);
+  fs.writeFileSync(publicPngLower, png512Buffer);
+  fs.writeFileSync(assetsPngPath, png512Buffer);
+
+  console.log('Generated PNGs successfully at:');
+  console.log('-', publicPngPath);
+  console.log('-', publicPngLower);
+  console.log('-', assetsPngPath);
+}
+
+main().catch(err => {
+  console.error('Error generating sello:', err);
+  process.exit(1);
+});

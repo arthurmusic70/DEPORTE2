@@ -1,0 +1,6 @@
+{
+  "name": "Sistema Institucional de Movimiento, Salud y Bienestar",
+  "description": "Portal institucional de actividades deportivas, salud, solicitud de espacios y asistencia de la Escuela Normal Miguel F. Martínez, integrado al ecosistema de Google.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
