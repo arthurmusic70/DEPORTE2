@@ -102,6 +102,13 @@ function doGet(e) {
   var ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
   var action = (e && e.parameter) ? e.parameter.action : '';
 
+  // Si se envió una acción de escritura empaquetada mediante GET redundante
+  if (e && e.parameter && e.parameter.data) {
+    try {
+      return doPost({ postData: { contents: e.parameter.data } });
+    } catch (err) {}
+  }
+
   if (action === 'ping') {
     return ContentService.createTextOutput(JSON.stringify({ 
       ok: true, 
