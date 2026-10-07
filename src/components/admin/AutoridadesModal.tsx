@@ -12,16 +12,22 @@ interface AutoridadesModalProps {
 export const AutoridadesModal: React.FC<AutoridadesModalProps> = ({ onCerrar, onGuardado }) => {
   const [config, setConfig] = useState<AutoridadesConfig>(MSBDatabase.getAutoridades());
   const [guardado, setGuardado] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const [mostrarFirmaModal, setMostrarFirmaModal] = useState<false | 'matutino' | 'vespertino' | 'ambos'>(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    MSBDatabase.saveAutoridades(config);
-    setGuardado(true);
-    setTimeout(() => {
-      onGuardado();
-      onCerrar();
-    }, 1000);
+    setGuardando(true);
+    try {
+      await MSBDatabase.saveAutoridades(config);
+      setGuardado(true);
+      setTimeout(() => {
+        onGuardado();
+        onCerrar();
+      }, 1500);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -175,10 +181,11 @@ export const AutoridadesModal: React.FC<AutoridadesModalProps> = ({ onCerrar, on
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-xs flex items-center space-x-1.5 cursor-pointer"
+              disabled={guardando}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-semibold shadow-xs flex items-center space-x-1.5 cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              <span>Guardar Firmas</span>
+              <span>{guardando ? 'Sincronizando con Base Maestra...' : 'Guardar y Sincronizar'}</span>
             </button>
           </div>
 

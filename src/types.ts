@@ -254,6 +254,11 @@ export interface ConfiguracionEvaluaciones {
   mensajeAccesoRestringido?: string;
   ultimaActualizacionPor?: string;
   fechaModificacion?: string;
+  // Enlaces a Google Forms oficiales del Departamento
+  urlFormEvaluacionEncargados?: string;
+  urlFormSatisfaccionServicios?: string;
+  urlFormPercepcionBienestar?: string;
+  urlHojaRespuestasForms?: string;
 }
 
 export interface ImagenActividad {

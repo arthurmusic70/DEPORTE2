@@ -98,11 +98,24 @@ function msb_getHojaSegura(ss, nombreHoja, encabezadosPorDefecto) {
   return hoja;
 }
 
+// Búsqueda rápida de fila para evitar duplicidad de registros (1-indexed)
+function msb_buscarFilaPorValor(hoja, colIndex, valor) {
+  if (!valor) return -1;
+  var datos = hoja.getDataRange().getValues();
+  var valStr = String(valor).trim().toLowerCase();
+  for (var i = 1; i < datos.length; i++) {
+    if (String(datos[i][colIndex - 1]).trim().toLowerCase() === valStr) {
+      return i + 1;
+    }
+  }
+  return -1;
+}
+
 function doGet(e) {
   var ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
   var action = (e && e.parameter) ? e.parameter.action : '';
 
-  // Si se envió una acción de escritura empaquetada mediante GET redundante
+  // Procesamiento de peticiones de escritura empaquetadas
   if (e && e.parameter && e.parameter.data) {
     try {
       return doPost({ postData: { contents: e.parameter.data } });
@@ -127,6 +140,11 @@ function doGet(e) {
     var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
     var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','idActividad','nombreActividad','categoria','p1_satisfaccionGeneral','p2_calidadInstalaciones','p3_desempenoEncargado','p4_cumplimientoHorarios','p5_ambienteConvivencia','p6_beneficioSalud','p7_recomendariaActividad','comentarios','fechaEvaluacion','idUsuario','nombreUsuario']);
     var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas', ['idEvaluacion','idParticipante','nombreParticipante','fechaRegistro','puntuacionGeneral','categoriaRendimiento','inicial_json','final_json']);
+    var autHoja = msb_getHojaSegura(ss, 'Autoridades', ['tituloJefatura','jefeMatutinoNombre','jefeMatutinoCargo','jefeMatutinoFirma','jefeVespertinoNombre','jefeVespertinoCargo','jefeVespertinoFirma','ultimaActualizacion']);
+    var cfgHoja = msb_getHojaSegura(ss, 'Config_Evaluaciones', ['habilitada','fechaHabilitacion','urlFormEvaluacionEncargados','urlFormSatisfaccionServicios','urlFormPercepcionBienestar','mensajeAccesoRestringido','ultimaActualizacion']);
+
+    var autList = msb_getAllObjects(autHoja, msb_getHeaders(autHoja));
+    var cfgList = msb_getAllObjects(cfgHoja, msb_getHeaders(cfgHoja));
 
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
@@ -138,11 +156,13 @@ function doGet(e) {
       galeria: msb_getAllObjects(galHoja, msb_getHeaders(galHoja)),
       identidades: msb_getAllObjects(idHoja, msb_getHeaders(idHoja)),
       evaluaciones: msb_getAllObjects(evHoja, msb_getHeaders(evHoja)),
-      pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja))
+      pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja)),
+      autoridades: autList.length ? autList[0] : null,
+      configEvaluaciones: cfgList.length ? cfgList[0] : null
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
-  return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'API Activa' }))
+  return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'API Activa 1.1' }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -152,57 +172,149 @@ function doPost(e) {
     var postData = JSON.parse(e.postData.contents);
     var action = postData.action;
 
-    // 1. Guardar Solicitud F02
+    // 1. Guardar Solicitud F02 (con prevención de duplicados)
     if (action === 'guardarSolicitud' && postData.solicitud) {
-      var solHoja = msb_getHojaSegura(ss, 'Solicitudes');
+      var solHoja = msb_getHojaSegura(ss, 'Solicitudes', ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones']);
       var s = postData.solicitud;
-      solHoja.appendRow([
+      var filaSol = msb_buscarFilaPorValor(solHoja, 1, s.ID_solicitud);
+      var filaSolValores = [
         s.ID_solicitud, s.Fecha_solicitud, s.Solicitante_ID, s.Solicitante_Nombre,
         s.Solicitante_Rol, s.Nivel_prioridad, s.Prioridad_Etiqueta, s.Tipo_solicitud,
         s.ID_recurso, s.Recurso_Nombre, s.Fecha_uso, s.Hora_inicio, s.Hora_fin,
-        s.Cantidad, s.Proposito, s.Estado, s.Revisado_por_ID, s.Fecha_resolucion, s.Motivo_observaciones
-      ]);
+        s.Cantidad, s.Proposito, s.Estado, s.Revisado_por_ID || '', s.Fecha_resolucion || '', s.Motivo_observaciones || ''
+      ];
+      if (filaSol > 0) {
+        solHoja.getRange(filaSol, 1, 1, filaSolValores.length).setValues([filaSolValores]);
+      } else {
+        solHoja.appendRow(filaSolValores);
+      }
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Solicitud sincronizada' })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 2. Guardar Inscripción F01
+    // 2. Dictaminar y Actualizar Estado de Solicitud F02 (Aprobar / Rechazar)
+    if (action === 'actualizarSolicitud' && postData.idSolicitud) {
+      var solHoja = msb_getHojaSegura(ss, 'Solicitudes');
+      var filaSol = msb_buscarFilaPorValor(solHoja, 1, postData.idSolicitud);
+      if (filaSol > 0) {
+        solHoja.getRange(filaSol, 16).setValue(postData.estado);
+        solHoja.getRange(filaSol, 17).setValue(postData.reviewerId || '');
+        solHoja.getRange(filaSol, 18).setValue(postData.fechaResolucion || '');
+        solHoja.getRange(filaSol, 19).setValue(postData.motivo || '');
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Solicitud dictaminada y actualizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3. Guardar Inscripción F01 (con prevención de duplicados)
     if (action === 'guardarInscripcion' && postData.inscripcion) {
-      var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia');
+      var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
       var ins = postData.inscripcion;
-      insHoja.appendRow([
-        ins.ID_registro, ins.ID_actividad, ins.ID_participante, ins.Fecha_inscripción,
-        ins.Estado_inscripcion, ins.Asistencia || 'No registrada', ins.Fecha_asistencia || '', ins.Observaciones || ''
-      ]);
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Inscripción sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+      var filaIns = msb_buscarFilaPorValor(insHoja, 1, ins.ID_registro);
+      if (filaIns < 0) {
+        var datosIns = insHoja.getDataRange().getValues();
+        for (var k = 1; k < datosIns.length; k++) {
+          if (String(datosIns[k][1]).trim() === String(ins.ID_actividad).trim() && 
+              String(datosIns[k][2]).trim() === String(ins.ID_participante).trim()) {
+            filaIns = k + 1;
+            break;
+          }
+        }
+      }
+      var filaInsValores = [
+        ins.ID_registro, ins.ID_actividad, ins.ID_participante, ins.Fecha_inscripción || ins.Fecha_inscripcion,
+        ins.Estado_inscripcion || ins.Estado_inscripción, ins.Asistencia || 'No registrada', ins.Fecha_asistencia || '', ins.Observaciones || ''
+      ];
+      if (filaIns > 0) {
+        insHoja.getRange(filaIns, 1, 1, filaInsValores.length).setValues([filaInsValores]);
+      } else {
+        insHoja.appendRow(filaInsValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Inscripción sincronizada sin duplicados' })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 3. Guardar / Sincronizar Galería Completa (Fotos y Videos para todas las computadoras)
-    if (action === 'guardarGaleria' && Array.isArray(postData.galeria)) {
-      var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
-      galHoja.clearContents();
-      galHoja.appendRow(['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
-      postData.galeria.forEach(function(g) {
-        galHoja.appendRow([
-          g.id || '', g.titulo || '', g.descripcion || '', g.fecha || '', g.categoria || '',
-          g.url || '', g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
-        ]);
-      });
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Galería sincronizada globalmente' })).setMimeType(ContentService.MimeType.JSON);
+    // 4. Actualizar Asistencia individual
+    if (action === 'actualizarAsistencia' && postData.idRegistro) {
+      var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia');
+      var filaIns = msb_buscarFilaPorValor(insHoja, 1, postData.idRegistro);
+      if (filaIns > 0) {
+        insHoja.getRange(filaIns, 6).setValue(postData.asistencia || 'Asistió');
+        if (postData.fechaAsistencia) {
+          insHoja.getRange(filaIns, 7).setValue(postData.fechaAsistencia);
+        }
+        if (postData.obs) {
+          var obsActual = insHoja.getRange(filaIns, 8).getValue();
+          insHoja.getRange(filaIns, 8).setValue(obsActual ? (obsActual + ' | ' + postData.obs) : postData.obs);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Asistencia actualizada' })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 4. Guardar Identidad / Nuevo Usuario Registrado
+    // 5. Guardar Identidad / Usuario Registrado (con prevención de duplicados)
     if (action === 'guardarIdentidad' && postData.identidad) {
-      var idHoja = msb_getHojaSegura(ss, 'Identidades');
+      var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
       var u = postData.identidad;
-      idHoja.appendRow([
+      var filaId = msb_buscarFilaPorValor(idHoja, 1, u.id);
+      var filaUser = filaId > 0 ? filaId : msb_buscarFilaPorValor(idHoja, 2, u.username);
+      var filaIdValores = [
         u.id, u.username, u.pinHash, u.nombre, u.apellidos, u.sector, u.correo,
         u.tipoCuenta, u.estado, u.consentimiento, u.fechaAlta, u.rol,
         u.licenciatura || '', u.semestre || '', u.grupo || '', u.observaciones || ''
-      ]);
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Identidad sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+      ];
+      if (filaUser > 0) {
+        idHoja.getRange(filaUser, 1, 1, filaIdValores.length).setValues([filaIdValores]);
+      } else {
+        idHoja.appendRow(filaIdValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Identidad sincronizada sin duplicados' })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 5. Guardar Evaluación de Servicio
+    // 6. Guardar Firmas Oficiales y Autoridades Institucionales
+    if (action === 'guardarAutoridades' && postData.autoridades) {
+      var autHoja = msb_getHojaSegura(ss, 'Autoridades', [
+        'tituloJefatura', 'jefeMatutinoNombre', 'jefeMatutinoCargo', 'jefeMatutinoFirma',
+        'jefeVespertinoNombre', 'jefeVespertinoCargo', 'jefeVespertinoFirma', 'ultimaActualizacion'
+      ]);
+      var a = postData.autoridades;
+      var ahora = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var filaAut = [
+        a.tituloJefatura || 'Jefes del Departamento de Deporte y Salud',
+        a.jefeMatutinoNombre || '', a.jefeMatutinoCargo || '', a.jefeMatutinoFirma || '',
+        a.jefeVespertinoNombre || '', a.jefeVespertinoCargo || '', a.jefeVespertinoFirma || '',
+        ahora
+      ];
+      if (autHoja.getLastRow() >= 2) {
+        autHoja.getRange(2, 1, 1, filaAut.length).setValues([filaAut]);
+      } else {
+        autHoja.appendRow(filaAut);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Firmas y autoridades sincronizadas en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 7. Guardar Configuración de Evaluaciones y Enlaces Google Forms
+    if (action === 'guardarConfigEvaluaciones' && postData.config) {
+      var cfgHoja = msb_getHojaSegura(ss, 'Config_Evaluaciones', [
+        'habilitada', 'fechaHabilitacion', 'urlFormEvaluacionEncargados',
+        'urlFormSatisfaccionServicios', 'urlFormPercepcionBienestar', 'mensajeAccesoRestringido', 'ultimaActualizacion'
+      ]);
+      var c = postData.config;
+      var ahoraCfg = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var filaCfg = [
+        c.habilitada ? 'TRUE' : 'FALSE',
+        c.fechaHabilitacion || '',
+        c.urlFormEvaluacionEncargados || '',
+        c.urlFormSatisfaccionServicios || '',
+        c.urlFormPercepcionBienestar || '',
+        c.mensajeAccesoRestringido || '',
+        ahoraCfg
+      ];
+      if (cfgHoja.getLastRow() >= 2) {
+        cfgHoja.getRange(2, 1, 1, filaCfg.length).setValues([filaCfg]);
+      } else {
+        cfgHoja.appendRow(filaCfg);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Configuración de evaluaciones y enlaces Google Forms guardados en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 8. Guardar Evaluación de Servicio
     if (action === 'guardarEvaluacion' && postData.evaluacion) {
       var evHoja = msb_getHojaSegura(ss, 'Evaluaciones');
       var ev = postData.evaluacion;
@@ -216,16 +328,36 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Evaluación sincronizada' })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 6. Guardar Pruebas Físicas
+    // 9. Guardar Pruebas Físicas
     if (action === 'guardarEvaluacionFisica' && postData.evaluacion) {
       var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas');
       var pf = postData.evaluacion;
-      pfHoja.appendRow([
+      var filaPf = msb_buscarFilaPorValor(pfHoja, 1, pf.idEvaluacion);
+      var filaPfValores = [
         pf.idEvaluacion, pf.idParticipante, pf.nombreParticipante, pf.fechaRegistro,
         pf.puntuacionGeneral || 0, pf.categoriaRendimiento || '',
         JSON.stringify(pf.inicial || {}), JSON.stringify(pf.final || {})
-      ]);
+      ];
+      if (filaPf > 0) {
+        pfHoja.getRange(filaPf, 1, 1, filaPfValores.length).setValues([filaPfValores]);
+      } else {
+        pfHoja.appendRow(filaPfValores);
+      }
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Prueba física sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 10. Guardar / Sincronizar Galería Completa
+    if (action === 'guardarGaleria' && Array.isArray(postData.galeria)) {
+      var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      galHoja.clearContents();
+      galHoja.appendRow(['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      postData.galeria.forEach(function(g) {
+        galHoja.appendRow([
+          g.id || '', g.titulo || '', g.descripcion || '', g.fecha || '', g.categoria || '',
+          g.url || '', g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
+        ]);
+      });
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Galería sincronizada globalmente' })).setMimeType(ContentService.MimeType.JSON);
     }
 
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);

@@ -68,15 +68,15 @@ export const DiagnosticoModal: React.FC<DiagnosticoModalProps> = ({ onCerrar }) 
             </a>
 
             <a
-              href={CONFIG.URL_RESPONSES_SHEET}
+              href={`${CONFIG.URL_MASTER_SHEET}#gid=0`}
               target="_blank"
               rel="noopener noreferrer"
               className="p-3 bg-purple-950/40 hover:bg-purple-950/70 rounded-xl border border-purple-500/40 text-purple-300 flex items-center justify-between transition-colors"
             >
               <div>
-                <div className="font-bold text-white">Respuestas Forms</div>
+                <div className="font-bold text-white">Tablas Unificadas 1.1</div>
                 <div className="text-[10px] text-purple-400 font-mono truncate max-w-[150px]">
-                  {CONFIG.RESPONSE_SPREADSHEET_ID}
+                  F01, F02, Evaluaciones y Firmas
                 </div>
               </div>
               <ExternalLink className="w-4 h-4 text-purple-400" />

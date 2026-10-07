@@ -226,18 +226,19 @@ export const GoogleHeader: React.FC<GoogleHeaderProps> = ({
                           <span className="text-[10px] text-[#94a3b8]">Sheets 1.1</span>
                         </a>
 
-                        <a
-                          href={CONFIG.URL_RESPONSES_SHEET}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-[#112240] transition-all text-center group border border-transparent hover:border-[#1e3a8a]"
+                        <button
+                          onClick={() => {
+                            setMenuGoogleAbierto(false);
+                            onCambiarVista('evaluaciones');
+                          }}
+                          className="flex flex-col items-center justify-center p-2.5 rounded-xl hover:bg-[#112240] transition-all text-center group border border-transparent hover:border-[#1e3a8a] cursor-pointer"
                         >
                           <div className="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-400 flex items-center justify-center mb-1 group-hover:scale-105 transition-transform">
                             <FileText className="w-5 h-5" />
                           </div>
-                          <span className="text-xs font-medium text-white leading-tight">Respuestas</span>
-                          <span className="text-[10px] text-[#94a3b8]">Google Forms</span>
-                        </a>
+                          <span className="text-xs font-medium text-white leading-tight">Evaluaciones</span>
+                          <span className="text-[10px] text-[#94a3b8]">Forms Oficiales</span>
+                        </button>
 
                         <a
                           href="https://calendar.google.com"

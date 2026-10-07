@@ -27,12 +27,60 @@ export const CONFIG = {
   SUBDIRECCION: 'Subdirección de Servicios Estudiantiles',
   MASTER_SPREADSHEET_ID: '18CchbQkwcc_L0RiyDUGYclIKErQODdAhKWQDW7VKu0Y',
   DENOMINACION_BASE_MAESTRA: 'BASE_MAESTRA_MOVIMIENTO_SALUD_BIENESTAR 1.1',
-  RESPONSE_SPREADSHEET_ID: '1JfKniHV6va57ron5Q-1bQy5HU-BW_cxw0V_CsbxuEUQ',
   HOJA_CONTROL: 'Control_Formularios',
   URL_MASTER_SHEET: 'https://docs.google.com/spreadsheets/d/18CchbQkwcc_L0RiyDUGYclIKErQODdAhKWQDW7VKu0Y/edit',
-  URL_RESPONSES_SHEET: 'https://docs.google.com/spreadsheets/d/1JfKniHV6va57ron5Q-1bQy5HU-BW_cxw0V_CsbxuEUQ/edit',
-  DEFAULT_APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzCzli-FnUxm4JFjQxfq7cACQWBgn7E9gHBCL7nJu2XI616GFwfkEAE8Lv_Nhf6_kPG9g/exec'
+  DEFAULT_APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzCzli-FnUxm4JFjQxfq7cACQWBgn7E9gHBCL7nJu2XI616GFwfkEAE8Lv_Nhf6_kPG9g/exec',
+  // Formularios oficiales de Google Forms (predeterminados del Departamento)
+  DEFAULT_FORMS: {
+    EVALUACION_ENCARGADOS: 'https://forms.google.com',
+    SATISFACCION_SERVICIOS: 'https://forms.google.com',
+    PERCEPCION_BIENESTAR: 'https://forms.google.com'
+  }
 };
+
+// Generador de fecha y hora local institucional sincronizada con la zona horaria oficial (América/Monterrey - Nuevo León)
+export function msb_obtenerFechaHoraLocal(d: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Monterrey',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).formatToParts(d);
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
+    return `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}:${getPart('second')}`;
+  } catch {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${y}-${m}-${day} ${h}:${min}:${s}`;
+  }
+}
+
+export function msb_obtenerFechaLocal(d: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Monterrey',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(d);
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
+    return `${getPart('year')}-${getPart('month')}-${getPart('day')}`;
+  } catch {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+}
 
 // SHA-256 calculation matching Google Apps Script Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, pin, Utilities.Charset.UTF_8)
 export async function msb_hashPIN(pin: string): Promise<string> {
@@ -1335,7 +1383,7 @@ export class MSBDatabase {
       ...evaluacion,
       ...calculados,
       idEvaluacion: evaluacion.idEvaluacion || `EVA-${String(list.length + 1).padStart(3, '0')}`,
-      fechaRegistro: new Date().toISOString().substring(0, 10)
+      fechaRegistro: msb_obtenerFechaLocal()
     };
 
     if (idx >= 0) {
@@ -1460,7 +1508,7 @@ export class MSBDatabase {
       nombreParticipante: `${user.nombre} ${user.apellidos}`,
       correo: user.correo,
       filiacion: `${user.licenciatura || 'Lic. Educación'} • ${user.semestre || 'Semestre en curso'} (${user.grupo || 'Grupo A'})`,
-      fechaSolicitud: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      fechaSolicitud: msb_obtenerFechaHoraLocal(),
       tipoMedicion: datos.tipoMedicion,
       motivo: datos.motivo.trim() || 'Modificación o corrección de datos en evaluación de capacidades físicas.',
       estado: 'Pendiente'
@@ -1485,7 +1533,7 @@ export class MSBDatabase {
     if (!target) return { ok: false, mensaje: 'Solicitud no encontrada.' };
 
     target.estado = estado;
-    target.fechaResolucion = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    target.fechaResolucion = msb_obtenerFechaHoraLocal();
     target.resolucionAdmin = resolucionAdmin || (estado === 'Autorizada' ? 'Autorizado por el Administrador.' : 'Rechazado.');
 
     this.saveSolicitudesModificacionPruebas(solicitudes);
@@ -1644,8 +1692,7 @@ export class MSBDatabase {
     const nextId = this.nextID('PAR', identidades);
     const pinHash = await msb_hashPIN(datos.pin);
 
-    const now = new Date();
-    const fechaStr = now.toISOString().replace('T', ' ').substring(0, 19);
+    const fechaStr = msb_obtenerFechaHoraLocal();
 
     // Asignar rol validado estrictamente según sector
     let assignedRole: RolUsuario = 'estudiante';
@@ -1715,7 +1762,7 @@ export class MSBDatabase {
     }
 
     const nuevoRegId = this.nextID('REG', inscripciones);
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = msb_obtenerFechaHoraLocal();
 
     const estadoInscripcion = actividad.Requiere_autorización === 'Sí' || tipoParticipacion.toLowerCase().includes('interés')
       ? 'Solicitada'
@@ -1778,7 +1825,7 @@ export class MSBDatabase {
   }): Promise<{ ok: boolean; idSolicitud?: string; mensaje: string; prioridad: Solicitud['Prioridad_Etiqueta'] }> {
     const solicitudes = this.getSolicitudes();
     const idSol = this.nextID('SOL', solicitudes);
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const now = msb_obtenerFechaHoraLocal();
 
     // Calcular jerarquía oficial de prioridad (respetando la selección explícita del administrador)
     const { nivel, etiqueta } = calcularPrioridadSolicitud(
@@ -1827,10 +1874,10 @@ export class MSBDatabase {
     };
   }
 
-  // Coordinator / Admin actions
+  // Coordinator / Admin actions: Dictaminar y autorizar o rechazar solicitudes F02
   static updateSolicitudStatus(
     idSolicitud: string,
-    estado: 'Aprobada' | 'Rechazada',
+    estado: 'Aprobada' | 'Rechazada' | 'Pendiente',
     motivo: string,
     reviewerId: string
   ): void {
@@ -1839,10 +1886,20 @@ export class MSBDatabase {
     if (s) {
       s.Estado = estado;
       s.Revisado_por_ID = reviewerId;
-      s.Fecha_resolucion = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      s.Fecha_resolucion = estado === 'Pendiente' ? '' : msb_obtenerFechaHoraLocal();
       s.Motivo_observaciones = motivo;
       this.saveSolicitudes(solicitudes);
-      this.postToGoogleSheets({ action: 'actualizarSolicitud', idSolicitud, estado, motivo, reviewerId });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('msb_datos_actualizados'));
+      }
+      this.postToGoogleSheets({ 
+        action: 'actualizarSolicitud', 
+        idSolicitud, 
+        estado, 
+        motivo, 
+        reviewerId,
+        fechaResolucion: s.Fecha_resolucion
+      });
     }
   }
 
@@ -2025,8 +2082,13 @@ export class MSBDatabase {
     return this.getAutoridades();
   }
 
-  static saveAutoridades(data: AutoridadesConfig): void {
+  static async saveAutoridades(data: AutoridadesConfig): Promise<void> {
     setStored('AUTORIDADES', data);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('msb_autoridades_actualizadas', { detail: data }));
+      window.dispatchEvent(new Event('msb_datos_actualizados'));
+    }
+    await this.postToGoogleSheets({ action: 'guardarAutoridades', autoridades: data });
   }
 
   // ================= EVALUACIONES Y ENCUESTAS DEL DEPARTAMENTO (CONFIDENCIALES Y ANÓNIMAS) =================
@@ -2122,12 +2184,24 @@ export class MSBDatabase {
       fechaHabilitacion: stored.fechaHabilitacion || DEFAULT_CONFIG_EVALUACIONES.fechaHabilitacion,
       mensajeAccesoRestringido: stored.mensajeAccesoRestringido || DEFAULT_CONFIG_EVALUACIONES.mensajeAccesoRestringido,
       ultimaActualizacionPor: stored.ultimaActualizacionPor,
-      fechaModificacion: stored.fechaModificacion
+      fechaModificacion: stored.fechaModificacion,
+      urlFormEvaluacionEncargados: stored.urlFormEvaluacionEncargados || '',
+      urlFormSatisfaccionServicios: stored.urlFormSatisfaccionServicios || '',
+      urlFormPercepcionBienestar: stored.urlFormPercepcionBienestar || '',
+      urlHojaRespuestasForms: stored.urlHojaRespuestasForms || ''
     };
   }
 
   static saveConfiguracionEvaluaciones(data: ConfiguracionEvaluaciones): void {
-    setStored('CONFIG_EVALUACIONES', data);
+    const updated: ConfiguracionEvaluaciones = {
+      ...data,
+      fechaModificacion: msb_obtenerFechaHoraLocal()
+    };
+    setStored('CONFIG_EVALUACIONES', updated);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('msb_datos_actualizados'));
+    }
+    this.postToGoogleSheets({ action: 'guardarConfigEvaluaciones', config: updated });
   }
 
   static estaEvaluacionHabilitada(): boolean {
@@ -2293,7 +2367,7 @@ export class MSBDatabase {
     return !!this.getAppsScriptUrl();
   }
 
-  // Envío ultra-resiliente en segundo plano de registros a Google Sheets (compatible con CORS y redirects)
+  // Envío ultra-resiliente de registros a Google Sheets (una sola transmisión para evitar duplicados)
   static async postToGoogleSheets(payload: { action: string; [key: string]: any }): Promise<{ ok: boolean; mensaje?: string }> {
     const endpoint = this.getAppsScriptUrl().trim();
     if (!endpoint) return { ok: false, mensaje: 'Sin endpoint configurado' };
@@ -2301,19 +2375,23 @@ export class MSBDatabase {
     try {
       const jsonBody = JSON.stringify(payload);
       
-      // 1. Envío por GET parametrizado (máxima compatibilidad con Google Apps Script redirects y cors)
-      const urlParams = `${endpoint}${endpoint.includes('?') ? '&' : '?'}action=${encodeURIComponent(payload.action)}&data=${encodeURIComponent(jsonBody)}`;
-      fetch(urlParams, { method: 'GET', mode: 'no-cors' }).catch(() => {});
-
-      // 2. Envío POST complementario con text/plain
-      fetch(endpoint, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: jsonBody
-      }).catch(() => {});
+      // Enviar una ÚNICA petición atómica para evitar duplicados en la Base Maestra
+      try {
+        await fetch(endpoint, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8'
+          },
+          body: jsonBody
+        });
+      } catch (postErr) {
+        // En caso excepcional de fallo de red en POST, reintentar con GET
+        if (jsonBody.length < 1800) {
+          const urlParams = `${endpoint}${endpoint.includes('?') ? '&' : '?'}action=${encodeURIComponent(payload.action)}&data=${encodeURIComponent(jsonBody)}`;
+          await fetch(urlParams, { method: 'GET', mode: 'no-cors' }).catch(() => {});
+        }
+      }
 
       // Disparar evento para actualizar vistas locales de inmediato
       if (typeof window !== 'undefined') {
@@ -2337,13 +2415,19 @@ export class MSBDatabase {
     if (item) {
       item.Asistencia = asistencia;
       if (asistencia === 'Asistió') {
-        item.Fecha_asistencia = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        item.Fecha_asistencia = msb_obtenerFechaHoraLocal();
       }
       if (obs) {
         item.Observaciones = `${item.Observaciones} | ${obs}`;
       }
       this.saveInscripciones(inscripciones);
-      this.postToGoogleSheets({ action: 'actualizarAsistencia', idRegistro, asistencia, obs });
+      this.postToGoogleSheets({ 
+        action: 'actualizarAsistencia', 
+        idRegistro, 
+        asistencia, 
+        fechaAsistencia: item.Fecha_asistencia || '',
+        obs 
+      });
     }
   }
 
@@ -2413,12 +2497,21 @@ export class MSBDatabase {
           setStored('SESIONES_ASISTENCIA', data.sesiones_asistencia);
         }
         
-        // Sincronización del Escudo / Sello Oficial Institucional
-        if (data.escudoActivo && data.escudoActivo.url) {
-          setStored('MSB_ESCUDO_ACTIVO', data.escudoActivo);
+        // Sincronización de Autoridades y Firmas Oficiales
+        if (data.autoridades && typeof data.autoridades === 'object') {
+          setStored('AUTORIDADES', data.autoridades);
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('msb_escudo_cambiado', { detail: data.escudoActivo }));
+            window.dispatchEvent(new CustomEvent('msb_autoridades_actualizadas', { detail: data.autoridades }));
           }
+        }
+
+        // Sincronización de Configuración de Evaluaciones y Formularios Google Forms
+        if (data.configEvaluaciones && typeof data.configEvaluaciones === 'object') {
+          const actualCfg = this.getConfiguracionEvaluaciones();
+          setStored('CONFIG_EVALUACIONES', {
+            ...actualCfg,
+            ...data.configEvaluaciones
+          });
         }
         
         if (typeof window !== 'undefined') {
@@ -2444,7 +2537,7 @@ export class MSBDatabase {
           ? '🟢 MODO EN VIVO: Conectado a Google Apps Script Web App' 
           : '🟡 MODO LOCAL: Almacenamiento local con esquema 1:1 de Base Maestra 1.1',
         `✓ BASE MAESTRA GOOGLE SHEETS: ID ${CONFIG.MASTER_SPREADSHEET_ID} (${CONFIG.DENOMINACION_BASE_MAESTRA})`,
-        `✓ ARCHIVO RESPUESTAS FORMULARIOS: ID ${CONFIG.RESPONSE_SPREADSHEET_ID}`,
+        '✓ BASE UNIFICADA 1.1: Todas las tablas operativas (Identidades, Solicitudes, Inscripciones, Evaluaciones, Autoridades) en Base Maestra',
         '✓ Jerarquía de Prioridad: 0-Dirección | 1-Deportiva | 2-Docente | 3-Comunidad',
         '✓ Regla de Asistencia: Validación automática con umbral mínimo del 85%',
         '✓ Modos de Asistencia: Sincrónico (en vivo) y Matriz Calendario (fecha por fecha)',
@@ -2728,9 +2821,8 @@ export class MSBDatabase {
       institucion: CONFIG.INSTITUCION,
       departamento: CONFIG.DEPARTAMENTO,
       version: '2.0-produccion',
-      fechaExportacion: new Date().toISOString(),
+      fechaExportacion: msb_obtenerFechaHoraLocal(),
       baseMaestraId: CONFIG.MASTER_SPREADSHEET_ID,
-      respuestasSheetId: CONFIG.RESPONSE_SPREADSHEET_ID,
       tablas: {
         identidades: this.getIdentidades(),
         actividades: this.getActividades(),
@@ -2809,4 +2901,313 @@ export function getGoogleCalendarLink(actividad: Actividad): string {
   const dates = `${startDateStr}T${startTimeStr}/${startDateStr}T${endTimeStr}`;
 
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}&dates=${dates}`;
+}
+
+// Generador del código fuente oficial de Google Apps Script 1.1 para la Base Maestra
+export function generarCodigoAppsScriptCompleto(): string {
+  return `// ============================================================
+// SISTEMA INSTITUCIONAL DE MOVIMIENTO, SALUD Y BIENESTAR 1.1
+// Escuela Normal "Miguel F. Martínez" - Depto. Deporte y Salud
+// Base Maestra: ${CONFIG.DENOMINACION_BASE_MAESTRA}
+// Master Spreadsheet ID: ${CONFIG.MASTER_SPREADSHEET_ID}
+// ============================================================
+
+function msb_getHojaSegura(ss, nombreHoja, encabezadosPorDefecto) {
+  var hoja = ss.getSheetByName(nombreHoja);
+  if (!hoja) {
+    hoja = ss.insertSheet(nombreHoja);
+    if (encabezadosPorDefecto && encabezadosPorDefecto.length) {
+      hoja.appendRow(encabezadosPorDefecto);
+    }
+  }
+  return hoja;
+}
+
+// Búsqueda rápida de fila para evitar duplicidad de registros (1-indexed)
+function msb_buscarFilaPorValor(hoja, colIndex, valor) {
+  if (!valor) return -1;
+  var datos = hoja.getDataRange().getValues();
+  var valStr = String(valor).trim().toLowerCase();
+  for (var i = 1; i < datos.length; i++) {
+    if (String(datos[i][colIndex - 1]).trim().toLowerCase() === valStr) {
+      return i + 1;
+    }
+  }
+  return -1;
+}
+
+function msb_getHeaders(hoja) {
+  var data = hoja.getDataRange().getValues();
+  return data.length > 0 ? data[0] : [];
+}
+
+function msb_getAllObjects(hoja, headers) {
+  var data = hoja.getDataRange().getValues();
+  if (data.length <= 1) return [];
+  var result = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = row[j];
+    }
+    result.push(obj);
+  }
+  return result;
+}
+
+function doGet(e) {
+  var ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
+  var action = (e && e.parameter) ? e.parameter.action : '';
+
+  if (e && e.parameter && e.parameter.data) {
+    try {
+      return doPost({ postData: { contents: e.parameter.data } });
+    } catch (err) {}
+  }
+
+  if (action === 'ping') {
+    return ContentService.createTextOutput(JSON.stringify({ 
+      ok: true, 
+      mensaje: 'Conectado a ${CONFIG.DENOMINACION_BASE_MAESTRA}',
+      spreadsheetId: '${CONFIG.MASTER_SPREADSHEET_ID}'
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === 'obtenerTodo') {
+    var actHoja = msb_getHojaSegura(ss, 'Actividades', ['ID_actividad','Nombre','Descripción','Tipo','Cupo']);
+    var espHoja = msb_getHojaSegura(ss, 'Espacios', ['ID_espacio','Nombre','Ubicación','Capacidad']);
+    var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoría','Estado']);
+    var solHoja = msb_getHojaSegura(ss, 'Solicitudes', ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones']);
+    var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
+    var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+    var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
+    var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','idActividad','nombreActividad','categoria','p1_satisfaccionGeneral','p2_calidadInstalaciones','p3_desempenoEncargado','p4_cumplimientoHorarios','p5_ambienteConvivencia','p6_beneficioSalud','p7_recomendariaActividad','comentarios','fechaEvaluacion','idUsuario','nombreUsuario']);
+    var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas', ['idEvaluacion','idParticipante','nombreParticipante','fechaRegistro','puntuacionGeneral','categoriaRendimiento','inicial_json','final_json']);
+    var autHoja = msb_getHojaSegura(ss, 'Autoridades', ['tituloJefatura','jefeMatutinoNombre','jefeMatutinoCargo','jefeMatutinoFirma','jefeVespertinoNombre','jefeVespertinoCargo','jefeVespertinoFirma','ultimaActualizacion']);
+    var cfgHoja = msb_getHojaSegura(ss, 'Config_Evaluaciones', ['habilitada','fechaHabilitacion','urlFormEvaluacionEncargados','urlFormSatisfaccionServicios','urlFormPercepcionBienestar','mensajeAccesoRestringido','ultimaActualizacion']);
+
+    var autList = msb_getAllObjects(autHoja, msb_getHeaders(autHoja));
+    var cfgList = msb_getAllObjects(cfgHoja, msb_getHeaders(cfgHoja));
+
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      actividades: msb_getAllObjects(actHoja, msb_getHeaders(actHoja)),
+      espacios: msb_getAllObjects(espHoja, msb_getHeaders(espHoja)),
+      inventario: msb_getAllObjects(invHoja, msb_getHeaders(invHoja)),
+      solicitudes: msb_getAllObjects(solHoja, msb_getHeaders(solHoja)),
+      inscripciones: msb_getAllObjects(insHoja, msb_getHeaders(insHoja)),
+      galeria: msb_getAllObjects(galHoja, msb_getHeaders(galHoja)),
+      identidades: msb_getAllObjects(idHoja, msb_getHeaders(idHoja)),
+      evaluaciones: msb_getAllObjects(evHoja, msb_getHeaders(evHoja)),
+      pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja)),
+      autoridades: autList.length ? autList[0] : null,
+      configEvaluaciones: cfgList.length ? cfgList[0] : null
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'API Activa 1.1' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    var ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
+    var postData = JSON.parse(e.postData.contents);
+    var action = postData.action;
+
+    // 1. Guardar Solicitud F02 (con prevención de duplicados)
+    if (action === 'guardarSolicitud' && postData.solicitud) {
+      var solHoja = msb_getHojaSegura(ss, 'Solicitudes', ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones']);
+      var s = postData.solicitud;
+      var filaSol = msb_buscarFilaPorValor(solHoja, 1, s.ID_solicitud);
+      var filaSolValores = [
+        s.ID_solicitud, s.Fecha_solicitud, s.Solicitante_ID, s.Solicitante_Nombre,
+        s.Solicitante_Rol, s.Nivel_prioridad, s.Prioridad_Etiqueta, s.Tipo_solicitud,
+        s.ID_recurso, s.Recurso_Nombre, s.Fecha_uso, s.Hora_inicio, s.Hora_fin,
+        s.Cantidad, s.Proposito, s.Estado, s.Revisado_por_ID || '', s.Fecha_resolucion || '', s.Motivo_observaciones || ''
+      ];
+      if (filaSol > 0) {
+        solHoja.getRange(filaSol, 1, 1, filaSolValores.length).setValues([filaSolValores]);
+      } else {
+        solHoja.appendRow(filaSolValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Solicitud sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 2. Dictaminar y Actualizar Estado de Solicitud F02 (Aprobar / Rechazar)
+    if (action === 'actualizarSolicitud' && postData.idSolicitud) {
+      var solHoja = msb_getHojaSegura(ss, 'Solicitudes');
+      var filaSol = msb_buscarFilaPorValor(solHoja, 1, postData.idSolicitud);
+      if (filaSol > 0) {
+        solHoja.getRange(filaSol, 16).setValue(postData.estado);
+        solHoja.getRange(filaSol, 17).setValue(postData.reviewerId || '');
+        solHoja.getRange(filaSol, 18).setValue(postData.fechaResolucion || '');
+        solHoja.getRange(filaSol, 19).setValue(postData.motivo || '');
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Solicitud dictaminada y actualizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3. Guardar Inscripción F01 (con prevención de duplicados)
+    if (action === 'guardarInscripcion' && postData.inscripcion) {
+      var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
+      var ins = postData.inscripcion;
+      var filaIns = msb_buscarFilaPorValor(insHoja, 1, ins.ID_registro);
+      if (filaIns < 0) {
+        var datosIns = insHoja.getDataRange().getValues();
+        for (var k = 1; k < datosIns.length; k++) {
+          if (String(datosIns[k][1]).trim() === String(ins.ID_actividad).trim() && 
+              String(datosIns[k][2]).trim() === String(ins.ID_participante).trim()) {
+            filaIns = k + 1;
+            break;
+          }
+        }
+      }
+      var filaInsValores = [
+        ins.ID_registro, ins.ID_actividad, ins.ID_participante, ins.Fecha_inscripción || ins.Fecha_inscripcion,
+        ins.Estado_inscripcion || ins.Estado_inscripción, ins.Asistencia || 'No registrada', ins.Fecha_asistencia || '', ins.Observaciones || ''
+      ];
+      if (filaIns > 0) {
+        insHoja.getRange(filaIns, 1, 1, filaInsValores.length).setValues([filaInsValores]);
+      } else {
+        insHoja.appendRow(filaInsValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Inscripción sincronizada sin duplicados' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 4. Actualizar Asistencia individual
+    if (action === 'actualizarAsistencia' && postData.idRegistro) {
+      var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia');
+      var filaIns = msb_buscarFilaPorValor(insHoja, 1, postData.idRegistro);
+      if (filaIns > 0) {
+        insHoja.getRange(filaIns, 6).setValue(postData.asistencia || 'Asistió');
+        if (postData.fechaAsistencia) {
+          insHoja.getRange(filaIns, 7).setValue(postData.fechaAsistencia);
+        }
+        if (postData.obs) {
+          var obsActual = insHoja.getRange(filaIns, 8).getValue();
+          insHoja.getRange(filaIns, 8).setValue(obsActual ? (obsActual + ' | ' + postData.obs) : postData.obs);
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Asistencia actualizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 5. Guardar Identidad / Usuario Registrado (con prevención de duplicados)
+    if (action === 'guardarIdentidad' && postData.identidad) {
+      var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
+      var u = postData.identidad;
+      var filaId = msb_buscarFilaPorValor(idHoja, 1, u.id);
+      var filaUser = filaId > 0 ? filaId : msb_buscarFilaPorValor(idHoja, 2, u.username);
+      var filaIdValores = [
+        u.id, u.username, u.pinHash, u.nombre, u.apellidos, u.sector, u.correo,
+        u.tipoCuenta, u.estado, u.consentimiento, u.fechaAlta, u.rol,
+        u.licenciatura || '', u.semestre || '', u.grupo || '', u.observaciones || ''
+      ];
+      if (filaUser > 0) {
+        idHoja.getRange(filaUser, 1, 1, filaIdValores.length).setValues([filaIdValores]);
+      } else {
+        idHoja.appendRow(filaIdValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Identidad sincronizada sin duplicados' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 6. Guardar Firmas Oficiales y Autoridades Institucionales
+    if (action === 'guardarAutoridades' && postData.autoridades) {
+      var autHoja = msb_getHojaSegura(ss, 'Autoridades', [
+        'tituloJefatura', 'jefeMatutinoNombre', 'jefeMatutinoCargo', 'jefeMatutinoFirma',
+        'jefeVespertinoNombre', 'jefeVespertinoCargo', 'jefeVespertinoFirma', 'ultimaActualizacion'
+      ]);
+      var a = postData.autoridades;
+      var ahora = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var filaAut = [
+        a.tituloJefatura || 'Jefes del Departamento de Deporte y Salud',
+        a.jefeMatutinoNombre || '', a.jefeMatutinoCargo || '', a.jefeMatutinoFirma || '',
+        a.jefeVespertinoNombre || '', a.jefeVespertinoCargo || '', a.jefeVespertinoFirma || '',
+        ahora
+      ];
+      if (autHoja.getLastRow() >= 2) {
+        autHoja.getRange(2, 1, 1, filaAut.length).setValues([filaAut]);
+      } else {
+        autHoja.appendRow(filaAut);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Firmas y autoridades sincronizadas en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 7. Guardar Configuración de Evaluaciones y Enlaces Google Forms
+    if (action === 'guardarConfigEvaluaciones' && postData.config) {
+      var cfgHoja = msb_getHojaSegura(ss, 'Config_Evaluaciones', [
+        'habilitada', 'fechaHabilitacion', 'urlFormEvaluacionEncargados',
+        'urlFormSatisfaccionServicios', 'urlFormPercepcionBienestar', 'mensajeAccesoRestringido', 'ultimaActualizacion'
+      ]);
+      var c = postData.config;
+      var ahoraCfg = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var filaCfg = [
+        c.habilitada ? 'TRUE' : 'FALSE',
+        c.fechaHabilitacion || '',
+        c.urlFormEvaluacionEncargados || '',
+        c.urlFormSatisfaccionServicios || '',
+        c.urlFormPercepcionBienestar || '',
+        c.mensajeAccesoRestringido || '',
+        ahoraCfg
+      ];
+      if (cfgHoja.getLastRow() >= 2) {
+        cfgHoja.getRange(2, 1, 1, filaCfg.length).setValues([filaCfg]);
+      } else {
+        cfgHoja.appendRow(filaCfg);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Configuración de evaluaciones y enlaces Google Forms guardados en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 8. Guardar Evaluación de Servicio
+    if (action === 'guardarEvaluacion' && postData.evaluacion) {
+      var evHoja = msb_getHojaSegura(ss, 'Evaluaciones');
+      var ev = postData.evaluacion;
+      evHoja.appendRow([
+        ev.idRespuesta, ev.idActividad, ev.nombreActividad, ev.categoria,
+        ev.p1_satisfaccionGeneral, ev.p2_calidadInstalaciones, ev.p3_desempenoEncargado,
+        ev.p4_cumplimientoHorarios, ev.p5_ambienteConvivencia, ev.p6_beneficioSalud,
+        ev.p7_recomendariaActividad, ev.comentarios || '', ev.fechaEvaluacion,
+        'ANONIMO', 'Participante Anónimo'
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Evaluación sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 9. Guardar Pruebas Físicas
+    if (action === 'guardarEvaluacionFisica' && postData.evaluacion) {
+      var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas');
+      var pf = postData.evaluacion;
+      var filaPf = msb_buscarFilaPorValor(pfHoja, 1, pf.idEvaluacion);
+      var filaPfValores = [
+        pf.idEvaluacion, pf.idParticipante, pf.nombreParticipante, pf.fechaRegistro,
+        pf.puntuacionGeneral || 0, pf.categoriaRendimiento || '',
+        JSON.stringify(pf.inicial || {}), JSON.stringify(pf.final || {})
+      ];
+      if (filaPf > 0) {
+        pfHoja.getRange(filaPf, 1, 1, filaPfValores.length).setValues([filaPfValores]);
+      } else {
+        pfHoja.appendRow(filaPfValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Prueba física sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 10. Guardar / Sincronizar Galería Completa
+    if (action === 'guardarGaleria' && Array.isArray(postData.galeria)) {
+      var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      galHoja.clearContents();
+      galHoja.appendRow(['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      postData.galeria.forEach(function(g) {
+        galHoja.appendRow([
+          g.id || '', g.titulo || '', g.descripcion || '', g.fecha || '', g.categoria || '',
+          g.url || '', g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
+        ]);
+      });
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Galería sincronizada globalmente' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+`;
 }

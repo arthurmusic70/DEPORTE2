@@ -15,7 +15,13 @@ import {
   Layers,
   Info,
   ShieldAlert,
-  Crown
+  Crown,
+  Check,
+  X,
+  SlidersHorizontal,
+  CheckCircle,
+  XCircle,
+  Download
 } from 'lucide-react';
 
 interface SolicitudesViewProps {
@@ -23,9 +29,14 @@ interface SolicitudesViewProps {
 }
 
 export const SolicitudesView: React.FC<SolicitudesViewProps> = ({ usuario }) => {
+  const esAdmin = usuario.rol === 'administrador';
   const [espacios, setEspacios] = useState<Espacio[]>(MSBDatabase.getEspacios());
   const [inventario, setInventario] = useState<MaterialInventario[]>(MSBDatabase.getInventario());
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>(MSBDatabase.getSolicitudes());
+  const [vistaAdmin, setVistaAdmin] = useState<'dictamen' | 'formulario'>(esAdmin ? 'dictamen' : 'formulario');
+  const [filtroEstado, setFiltroEstado] = useState<'todas' | 'Pendiente' | 'Aprobada' | 'Rechazada'>('todas');
+  const [solicitudDictamen, setSolicitudDictamen] = useState<Solicitud | null>(null);
+  const [motivoDictamen, setMotivoDictamen] = useState<string>('');
 
   React.useEffect(() => {
     const handleActualizar = () => {
@@ -36,6 +47,33 @@ export const SolicitudesView: React.FC<SolicitudesViewProps> = ({ usuario }) => 
     window.addEventListener('msb_datos_actualizados', handleActualizar);
     return () => window.removeEventListener('msb_datos_actualizados', handleActualizar);
   }, []);
+
+  const handleResolverDirecto = (idSolicitud: string, nuevoEstado: 'Aprobada' | 'Rechazada' | 'Pendiente') => {
+    MSBDatabase.updateSolicitudStatus(
+      idSolicitud,
+      nuevoEstado,
+      nuevoEstado === 'Aprobada' 
+        ? 'Aprobada conforme a disponibilidad de espacios y materiales del departamento.' 
+        : nuevoEstado === 'Rechazada' 
+        ? 'No disponible en el horario o recurso solicitado.' 
+        : 'En espera de dictamen oficial.',
+      usuario.id
+    );
+    setSolicitudes(MSBDatabase.getSolicitudes());
+  };
+
+  const handleGuardarDictamenModal = (nuevoEstado: 'Aprobada' | 'Rechazada') => {
+    if (!solicitudDictamen) return;
+    MSBDatabase.updateSolicitudStatus(
+      solicitudDictamen.ID_solicitud,
+      nuevoEstado,
+      motivoDictamen.trim() || (nuevoEstado === 'Aprobada' ? 'Aprobada oficialmente.' : 'Rechazada por el departamento.'),
+      usuario.id
+    );
+    setSolicitudes(MSBDatabase.getSolicitudes());
+    setSolicitudDictamen(null);
+    setMotivoDictamen('');
+  };
 
   // Form State
   const [tipoSolicitud, setTipoSolicitud] = useState<'Espacio' | 'Material' | 'Espacio y material'>('Espacio');
@@ -159,10 +197,212 @@ export const SolicitudesView: React.FC<SolicitudesViewProps> = ({ usuario }) => 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Formulario Interactivo Oficial F02 */}
-        <div className="lg:col-span-7 bg-[#0a192f] rounded-3xl p-6 sm:p-8 border border-[#1e3a8a]/60 shadow-xl text-white">
+      {/* Selector de modo para Administrador: Dictamen de Solicitudes vs Generar Solicitud */}
+      {esAdmin && (
+        <div className="flex items-center space-x-2 border-b border-[#1e3a8a]/60 pb-3">
+          <button
+            onClick={() => setVistaAdmin('dictamen')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
+              vistaAdmin === 'dictamen'
+                ? 'bg-[#1e3a8a] text-white shadow-lg border border-blue-400'
+                : 'bg-[#0a192f] text-[#94a3b8] hover:text-white border border-[#1e3a8a]/40'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4 text-cyan-400" />
+            <span>Dictamen y Aprobación Institucional F02</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/30 text-amber-300 font-mono font-bold">
+              {solicitudes.filter(s => s.Estado === 'Pendiente').length} pendientes
+            </span>
+          </button>
+
+          <button
+            onClick={() => setVistaAdmin('formulario')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
+              vistaAdmin === 'formulario'
+                ? 'bg-[#1e3a8a] text-white shadow-lg border border-blue-400'
+                : 'bg-[#0a192f] text-[#94a3b8] hover:text-white border border-[#1e3a8a]/40'
+            }`}
+          >
+            <Send className="w-4 h-4 text-emerald-400" />
+            <span>Generar Solicitud de Espacio/Material</span>
+          </button>
+        </div>
+      )}
+
+      {/* VISTA ADMINISTRATIVA: DICTAMEN DE TODAS LAS SOLICITUDES */}
+      {esAdmin && vistaAdmin === 'dictamen' ? (
+        <div className="bg-[#0a192f] rounded-3xl p-6 sm:p-7 border border-[#1e3a8a]/60 shadow-xl space-y-5 text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center space-x-2">
+                <Box className="w-5 h-5 text-cyan-400" />
+                <span>Panel de Autorización y Dictamen de Solicitudes F02</span>
+              </h2>
+              <p className="text-xs text-[#94a3b8] mt-0.5">
+                Revisa disponibilidad de espacios y materiales, aprueba o desaprueba peticiones con sincronización en tiempo real a Google Sheets.
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-emerald-400 font-mono font-semibold bg-emerald-950/80 px-3 py-1.5 rounded-xl border border-emerald-500/30">
+                Total: {solicitudes.length} registros
+              </span>
+            </div>
+          </div>
+
+          {/* Filtros de Estado */}
+          <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-[#1e3555]">
+            {(['todas', 'Pendiente', 'Aprobada', 'Rechazada'] as const).map((est) => {
+              const cant = est === 'todas' 
+                ? solicitudes.length 
+                : solicitudes.filter(s => s.Estado === est).length;
+              return (
+                <button
+                  key={est}
+                  onClick={() => setFiltroEstado(est)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
+                    filtroEstado === est
+                      ? 'bg-blue-600 text-white shadow-xs border border-blue-400'
+                      : 'bg-[#061426] text-[#94a3b8] hover:text-white border border-[#1e3a8a]/60'
+                  }`}
+                >
+                  <span>{est === 'todas' ? 'Todas las solicitudes' : est + 's'}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    filtroEstado === est ? 'bg-blue-800 text-white' : 'bg-[#112240] text-[#94a3b8]'
+                  }`}>
+                    {cant}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tabla de Dictamen */}
+          <div className="overflow-x-auto rounded-2xl border border-[#1e3a8a]/60">
+            <table className="w-full text-left text-xs text-[#d6e3ff] border-collapse">
+              <thead>
+                <tr className="bg-[#061426] border-b border-[#1e3a8a]/60 text-[#94a3b8] uppercase tracking-wider font-semibold">
+                  <th className="py-3 px-3">Folio</th>
+                  <th className="py-3 px-3">Prioridad</th>
+                  <th className="py-3 px-3">Solicitante</th>
+                  <th className="py-3 px-3">Recurso</th>
+                  <th className="py-3 px-3">Fecha y Horario</th>
+                  <th className="py-3 px-3">Propósito</th>
+                  <th className="py-3 px-3">Estado</th>
+                  <th className="py-3 px-3 text-right">Dictamen y Selector</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1e3a8a]/30">
+                {solicitudes
+                  .filter(s => filtroEstado === 'todas' || s.Estado === filtroEstado)
+                  .map((sol) => (
+                  <tr key={sol.ID_solicitud} className="hover:bg-[#112240]/60 transition-colors">
+                    <td className="py-3 px-3 font-mono font-bold text-white">{sol.ID_solicitud}</td>
+                    <td className="py-3 px-3">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block whitespace-nowrap ${
+                        sol.Nivel_prioridad === 0 ? 'bg-purple-950/80 text-purple-300 border border-purple-600/50' :
+                        sol.Nivel_prioridad === 1 ? 'bg-blue-950/80 text-blue-300 border border-blue-600/50' :
+                        sol.Nivel_prioridad === 2 ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50' :
+                        'bg-gray-800 text-gray-300 border border-gray-600'
+                      }`}>
+                        {sol.Prioridad_Etiqueta || `Nivel ${sol.Nivel_prioridad}`}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-semibold text-white">{sol.Solicitante_Nombre || sol.Solicitante_ID}</div>
+                      <div className="text-[10px] text-[#94a3b8] font-mono">{sol.Solicitante_Rol} • {sol.Solicitante_ID}</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-medium text-white">{sol.Recurso_Nombre || sol.ID_recurso}</div>
+                      <div className="text-[10px] text-[#94a3b8]">{sol.Tipo_solicitud} {sol.Cantidad && `• Cant: ${sol.Cantidad}`}</div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="text-white">{sol.Fecha_uso}</div>
+                      <div className="text-[11px] text-[#94a3b8] font-mono">{sol.Hora_inicio} a {sol.Hora_fin}</div>
+                    </td>
+                    <td className="py-3 px-3 max-w-xs truncate text-[#d6e3ff]" title={sol.Proposito}>
+                      {sol.Proposito}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        sol.Estado === 'Aprobada'
+                          ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-600/50'
+                          : sol.Estado === 'Rechazada'
+                          ? 'bg-red-950/80 text-red-300 border border-red-600/50'
+                          : 'bg-amber-950/80 text-amber-300 border border-amber-600/50'
+                      }`}>
+                        {sol.Estado}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end space-x-1.5 flex-nowrap">
+                        {/* Selector de Estado Selector Dropdown */}
+                        <select
+                          value={sol.Estado}
+                          onChange={(e) => handleResolverDirecto(sol.ID_solicitud, e.target.value as any)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                            sol.Estado === 'Aprobada'
+                              ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50'
+                              : sol.Estado === 'Rechazada'
+                              ? 'bg-red-950/90 text-red-300 border-red-500/50'
+                              : 'bg-amber-950/90 text-amber-300 border-amber-500/50'
+                          }`}
+                          title="Selector de dictamen oficial"
+                        >
+                          <option value="Pendiente" className="bg-[#0a192f] text-amber-300 font-bold">⏳ Pendiente</option>
+                          <option value="Aprobada" className="bg-[#0a192f] text-emerald-300 font-bold">✓ Aprobada</option>
+                          <option value="Rechazada" className="bg-[#0a192f] text-red-300 font-bold">✕ Rechazada</option>
+                        </select>
+
+                        {/* Botón directo Aprobar */}
+                        <button
+                          onClick={() => handleResolverDirecto(sol.ID_solicitud, 'Aprobada')}
+                          title="Aprobar solicitud de inmediato"
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                            sol.Estado === 'Aprobada'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-emerald-950/80 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40'
+                          }`}
+                        >
+                          ✓ Aprobar
+                        </button>
+
+                        {/* Botón directo Rechazar / Desaprobar */}
+                        <button
+                          onClick={() => handleResolverDirecto(sol.ID_solicitud, 'Rechazada')}
+                          title="Desaprobar o rechazar solicitud"
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                            sol.Estado === 'Rechazada'
+                              ? 'bg-red-600 text-white shadow-xs'
+                              : 'bg-red-950/80 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40'
+                          }`}
+                        >
+                          ✕ Rechazar
+                        </button>
+
+                        {/* Botón Dictamen con Observaciones */}
+                        <button
+                          onClick={() => {
+                            setSolicitudDictamen(sol);
+                            setMotivoDictamen(sol.Motivo_observaciones || '');
+                          }}
+                          title="Dictamen con observaciones detalladas o condiciones"
+                          className="px-2 py-1 bg-[#112240] hover:bg-[#1a3258] text-[#cbd5e1] hover:text-white rounded-lg text-xs border border-[#1e3a8a] transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          Observaciones...
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Formulario Interactivo Oficial F02 */}
+          <div className="lg:col-span-7 bg-[#0a192f] rounded-3xl p-6 sm:p-8 border border-[#1e3a8a]/60 shadow-xl text-white">
           
           <h2 className="text-lg font-bold text-white mb-5 flex items-center space-x-2">
             <FileText className="w-5 h-5 text-cyan-400" />
@@ -518,6 +758,72 @@ export const SolicitudesView: React.FC<SolicitudesViewProps> = ({ usuario }) => 
         </div>
 
       </div>
+      )}
+
+      {/* Modal para Dictaminar Solicitud F02 */}
+      {solicitudDictamen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#0a192f] text-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-[#1e3a8a] space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-[#1e3555] pb-3">
+              <h3 className="text-base sm:text-lg font-bold text-white flex items-center space-x-2">
+                <SlidersHorizontal className="w-5 h-5 text-cyan-400" />
+                <span>Dictaminar Solicitud {solicitudDictamen.ID_solicitud}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSolicitudDictamen(null)}
+                className="text-gray-400 hover:text-white p-1 rounded-full cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs bg-[#061426] p-3.5 rounded-xl border border-[#1e3a8a]/60 space-y-1.5 text-[#d6e3ff]">
+              <div><strong className="text-white">Solicitante:</strong> {solicitudDictamen.Solicitante_Nombre} ({solicitudDictamen.Solicitante_Rol})</div>
+              <div><strong className="text-white">Recurso:</strong> {solicitudDictamen.Recurso_Nombre}</div>
+              <div><strong className="text-white">Fecha y Horario:</strong> {solicitudDictamen.Fecha_uso} ({solicitudDictamen.Hora_inicio} a {solicitudDictamen.Hora_fin})</div>
+              <div><strong className="text-white">Propósito:</strong> {solicitudDictamen.Proposito}</div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#d6e3ff] mb-1">
+                Motivo u observaciones para el solicitante
+              </label>
+              <textarea
+                rows={3}
+                value={motivoDictamen}
+                onChange={(e) => setMotivoDictamen(e.target.value)}
+                placeholder="Indica condiciones de entrega, llave, recomendaciones o motivo de desaprobación."
+                className="w-full p-2.5 bg-[#061426] border border-[#1e3a8a] rounded-xl text-xs text-white placeholder-[#64748b] focus:ring-2 focus:ring-[#f59e0b] resize-none"
+              />
+            </div>
+
+            <div className="flex space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSolicitudDictamen(null)}
+                className="flex-1 py-2.5 bg-[#112240] hover:bg-[#1a3258] text-[#d6e3ff] rounded-xl text-xs font-semibold border border-[#1e3a8a]/60 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleGuardarDictamenModal('Rechazada')}
+                className="flex-1 py-2.5 bg-red-950 hover:bg-red-900 text-red-200 border border-red-800 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                ✕ Desaprobar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleGuardarDictamenModal('Aprobada')}
+                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
+              >
+                ✓ Aprobar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

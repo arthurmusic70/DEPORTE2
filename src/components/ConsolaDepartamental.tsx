@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SesionUsuario, Solicitud, InscripcionAsistencia, Actividad, Espacio, MaterialInventario, Identidad } from '../types';
-import { MSBDatabase, CONFIG } from '../utils/storage';
+import { MSBDatabase, CONFIG, generarCodigoAppsScriptCompleto, msb_obtenerFechaLocal } from '../utils/storage';
 import { 
   SlidersHorizontal, 
   CheckCircle, 
@@ -208,6 +208,22 @@ export const ConsolaDepartamental: React.FC<ConsolaDepartamentalProps> = ({ usua
     recargar();
   };
 
+  const [filtroEstadoSolicitudes, setFiltroEstadoSolicitudes] = useState<'todas' | 'Pendiente' | 'Aprobada' | 'Rechazada'>('todas');
+
+  const handleResolverSolicitudDirecto = (idSolicitud: string, nuevoEstado: 'Aprobada' | 'Rechazada' | 'Pendiente') => {
+    MSBDatabase.updateSolicitudStatus(
+      idSolicitud,
+      nuevoEstado,
+      nuevoEstado === 'Aprobada' 
+        ? 'Autorizado conforme a disponibilidad oficial del departamento.' 
+        : nuevoEstado === 'Rechazada'
+        ? 'No disponible en el horario o recurso solicitado.'
+        : 'En espera de revisión por el Departamento.',
+      usuario.id
+    );
+    recargar();
+  };
+
   const handleMarcarAsistencia = (idRegistro: string, estado: 'Asistió' | 'No registrada' | 'Justificado' | 'Falta') => {
     MSBDatabase.updateAsistencia(idRegistro, estado);
     recargar();
@@ -227,14 +243,14 @@ export const ConsolaDepartamental: React.FC<ConsolaDepartamentalProps> = ({ usua
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `MSB_${nombre}_${new Date().toISOString().substring(0, 10)}.csv`);
+    link.setAttribute('download', `MSB_${nombre}_${msb_obtenerFechaLocal()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   const copiarCodigoAppsScript = () => {
-    const scriptCode = `// SISTEMA INSTITUCIONAL DE MOVIMIENTO, SALUD Y BIENESTAR\n// Escuela Normal Miguel F. Martínez - Departamento de Deporte y Salud\n// Master Spreadsheet ID: ${CONFIG.MASTER_SPREADSHEET_ID}\n// Response Spreadsheet ID: ${CONFIG.RESPONSE_SPREADSHEET_ID}\n\nfunction doGet(e) {\n  return HtmlService.createHtmlOutputFromFile('Login').setTitle('Movimiento, Salud y Bienestar');\n}`;
+    const scriptCode = generarCodigoAppsScriptCompleto();
     navigator.clipboard.writeText(scriptCode);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
@@ -285,16 +301,13 @@ export const ConsolaDepartamental: React.FC<ConsolaDepartamentalProps> = ({ usua
             <ExternalLink className="w-3 h-3 text-emerald-400" />
           </a>
 
-          <a
-            href={CONFIG.URL_RESPONSES_SHEET}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 text-xs font-semibold rounded-xl border border-purple-500/40 transition-colors"
+          <button
+            onClick={() => setPestana('evaluaciones')}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 text-xs font-semibold rounded-xl border border-purple-500/40 transition-colors cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4 text-purple-400" />
-            <span>Respuestas Forms</span>
-            <ExternalLink className="w-3 h-3 text-purple-400" />
-          </a>
+            <span>Formularios de Evaluación Oficiales</span>
+          </button>
         </div>
       </div>
 
@@ -473,13 +486,42 @@ export const ConsolaDepartamental: React.FC<ConsolaDepartamentalProps> = ({ usua
                 Revisa disponibilidad, autoriza o rechaza solicitudes recibidas mediante el Formulario 02.
               </p>
             </div>
-            <button
-              onClick={() => descargarCSV('Solicitudes', solicitudes)}
-              className="inline-flex items-center space-x-1 px-3 py-1.5 bg-[#061426] hover:bg-[#112240] text-[#d6e3ff] border border-[#1e3a8a] text-xs font-medium rounded-xl transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Exportar Solicitudes CSV</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => descargarCSV('Solicitudes', solicitudes)}
+                className="inline-flex items-center space-x-1 px-3 py-1.5 bg-[#061426] hover:bg-[#112240] text-[#d6e3ff] border border-[#1e3a8a] text-xs font-medium rounded-xl transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Exportar CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Selector de Filtros de Estado */}
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            {(['todas', 'Pendiente', 'Aprobada', 'Rechazada'] as const).map((est) => {
+              const cant = est === 'todas' 
+                ? solicitudes.length 
+                : solicitudes.filter(s => s.Estado === est).length;
+              return (
+                <button
+                  key={est}
+                  onClick={() => setFiltroEstadoSolicitudes(est)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 ${
+                    filtroEstadoSolicitudes === est
+                      ? 'bg-blue-600 text-white shadow-xs border border-blue-400'
+                      : 'bg-[#061426] text-[#94a3b8] hover:text-white border border-[#1e3a8a]/60'
+                  }`}
+                >
+                  <span className="capitalize">{est === 'todas' ? 'Todas las solicitudes' : est + 's'}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    filtroEstadoSolicitudes === est ? 'bg-blue-800 text-white' : 'bg-[#112240] text-[#94a3b8]'
+                  }`}>
+                    {cant}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="overflow-x-auto">
@@ -493,11 +535,13 @@ export const ConsolaDepartamental: React.FC<ConsolaDepartamentalProps> = ({ usua
                   <th className="py-3 px-3">Fecha y Horario</th>
                   <th className="py-3 px-3">Propósito</th>
                   <th className="py-3 px-3">Estado</th>
-                  <th className="py-3 px-3 text-right">Acción</th>
+                  <th className="py-3 px-3 text-right">Dictamen y Selector</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e3a8a]/30">
-                {solicitudes.map((sol) => (
+                {solicitudes
+                  .filter(s => filtroEstadoSolicitudes === 'todas' || s.Estado === filtroEstadoSolicitudes)
+                  .map((sol) => (
                   <tr key={sol.ID_solicitud} className="hover:bg-[#112240]/60 transition-colors">
                     <td className="py-3 px-3 font-mono font-bold text-white">{sol.ID_solicitud}</td>
                     <td className="py-3 px-3">
@@ -537,19 +581,58 @@ export const ConsolaDepartamental: React.FC<ConsolaDepartamentalProps> = ({ usua
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
-                      {sol.Estado === 'Pendiente' ? (
+                      <div className="flex items-center justify-end space-x-1.5 flex-nowrap">
+                        {/* Selector directo de dictamen */}
+                        <select
+                          value={sol.Estado}
+                          onChange={(e) => handleResolverSolicitudDirecto(sol.ID_solicitud, e.target.value as any)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                            sol.Estado === 'Aprobada'
+                              ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50'
+                              : sol.Estado === 'Rechazada'
+                              ? 'bg-red-950/90 text-red-300 border-red-500/50'
+                              : 'bg-amber-950/90 text-amber-300 border-amber-500/50'
+                          }`}
+                          title="Selector de aprobación o desaprobación"
+                        >
+                          <option value="Pendiente" className="bg-[#0a192f] text-amber-300 font-bold">⏳ Pendiente</option>
+                          <option value="Aprobada" className="bg-[#0a192f] text-emerald-300 font-bold">✓ Aprobada</option>
+                          <option value="Rechazada" className="bg-[#0a192f] text-red-300 font-bold">✕ Rechazada</option>
+                        </select>
+
+                        <button
+                          onClick={() => handleResolverSolicitudDirecto(sol.ID_solicitud, 'Aprobada')}
+                          title="Aprobar solicitud de inmediato"
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                            sol.Estado === 'Aprobada'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-emerald-950/80 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40'
+                          }`}
+                        >
+                          ✓ Aprobar
+                        </button>
+                        <button
+                          onClick={() => handleResolverSolicitudDirecto(sol.ID_solicitud, 'Rechazada')}
+                          title="Desaprobar o rechazar solicitud"
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                            sol.Estado === 'Rechazada'
+                              ? 'bg-red-600 text-white shadow-xs'
+                              : 'bg-red-950/80 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/40'
+                          }`}
+                        >
+                          ✕ Rechazar
+                        </button>
                         <button
                           onClick={() => {
                             setSolicitudSeleccionada(sol);
-                            setDictamenMotivo('');
+                            setDictamenMotivo(sol.Motivo_observaciones || '');
                           }}
-                          className="px-3 py-1 bg-[#1e3a8a] hover:bg-blue-600 text-white rounded-lg text-xs font-semibold shadow-xs cursor-pointer transition-colors"
+                          title="Dictamen con observaciones detalladas o condiciones de entrega"
+                          className="px-2 py-1 bg-[#112240] hover:bg-[#1a3258] text-[#cbd5e1] hover:text-white rounded-lg text-xs border border-[#1e3a8a] transition-colors cursor-pointer whitespace-nowrap"
                         >
-                          Dictaminar
+                          Observaciones...
                         </button>
-                      ) : (
-                        <span className="text-[11px] text-[#64748b] italic">Revisada</span>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1071,30 +1154,11 @@ export const ConsolaDepartamental: React.FC<ConsolaDepartamentalProps> = ({ usua
           </div>
 
           <div className="p-4 bg-[#030a16] text-[#d6e3ff] rounded-2xl font-mono text-xs overflow-x-auto max-h-96 border border-[#1e3a8a]/60">
-            <pre className="text-emerald-400 font-semibold mb-2">// SISTEMA INSTITUCIONAL DE MOVIMIENTO, SALUD Y BIENESTAR</pre>
-            <pre className="text-[#94a3b8] mb-4">// Escuela Normal Miguel F. Martínez - Departamento de Deportes y Salud</pre>
-            <code>
-{`const CONFIG = {
-  INSTITUCION: '${CONFIG.INSTITUCION}',
-  SISTEMA: '${CONFIG.SISTEMA}',
-  DEPARTAMENTO: '${CONFIG.DEPARTAMENTO}',
-  MASTER_SPREADSHEET_ID: '${CONFIG.MASTER_SPREADSHEET_ID}',
-  RESPONSE_SPREADSHEET_ID: '${CONFIG.RESPONSE_SPREADSHEET_ID}',
-  F01_SHEET: 'Form Responses 1',
-  F02_SHEET: 'Form Responses 2'
-};
-
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('Sistema Movimiento y Salud')
-    .addItem('Inicializar sistema', 'inicializarSistema')
-    .addItem('Generar formularios', 'generarFormularios')
-    .addItem('Preparar datos maestros', 'prepararDatosMaestros')
-    .addItem('Instalar automatización F01/F02', 'msb_instalarTriggerRespuestas')
-    .addItem('Diagnóstico', 'msb_diagnostico')
-    .addToUi();
-}`}
-            </code>
+            <pre className="text-emerald-400 font-semibold mb-2">// SISTEMA INSTITUCIONAL DE MOVIMIENTO, SALUD Y BIENESTAR 1.1</pre>
+            <pre className="text-[#94a3b8] mb-4">// Base Maestra: {CONFIG.DENOMINACION_BASE_MAESTRA} ({CONFIG.MASTER_SPREADSHEET_ID})</pre>
+            <pre className="whitespace-pre text-cyan-200">
+              {generarCodigoAppsScriptCompleto()}
+            </pre>
           </div>
         </div>
       )}

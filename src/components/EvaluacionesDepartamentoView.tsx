@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SesionUsuario, Actividad, TipoEncuesta, RespuestaEncuesta, ConfiguracionEvaluaciones } from '../types';
-import { MSBDatabase, CONFIG, limpiarTituloLicenciado } from '../utils/storage';
+import { MSBDatabase, CONFIG, limpiarTituloLicenciado, msb_obtenerFechaHoraLocal } from '../utils/storage';
 import { 
   ClipboardCheck, 
   Star, 
@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Clock,
   Save,
+  FileSpreadsheet,
   X
 } from 'lucide-react';
 
@@ -30,7 +31,7 @@ interface EvaluacionesDepartamentoViewProps {
   usuario: SesionUsuario;
 }
 
-const ENLACES_GOOGLE_FORMS = {
+const ENLACES_GOOGLE_FORMS_DEFAULT = {
   evaluacion_encargados: 'https://docs.google.com/forms/d/15FfXryowBhfZ5NCLZjKdMR5OaSEt2OsjAySsBU7wcAI/viewform',
   satisfaccion_servicios: 'https://docs.google.com/forms/d/1zlMNBOQKBlaJJEmEIb5Nu2_s8VDLmIkWH3EWeJnWWeg/viewform',
   bienestar_salud: 'https://docs.google.com/forms/d/1viY_W9Xs2LjjM_tOFEm5CCB8M46PZ7SWYqbWm882hHo/viewform'
@@ -41,6 +42,17 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
   const [modalConfiguracion, setModalConfiguracion] = useState(false);
   const [formConfig, setFormConfig] = useState<ConfiguracionEvaluaciones>(() => MSBDatabase.getConfiguracionEvaluaciones());
   const [avisoAdminGuardado, setAvisoAdminGuardado] = useState(false);
+
+  // Obtener enlace configurado o predeterminado para cada formulario
+  const obtenerEnlaceForm = (tipo: TipoEncuesta) => {
+    if (tipo === 'evaluacion_encargados') {
+      return configuracion.urlFormEvaluacionEncargados || ENLACES_GOOGLE_FORMS_DEFAULT.evaluacion_encargados;
+    }
+    if (tipo === 'satisfaccion_servicios') {
+      return configuracion.urlFormSatisfaccionServicios || ENLACES_GOOGLE_FORMS_DEFAULT.satisfaccion_servicios;
+    }
+    return configuracion.urlFormPercepcionBienestar || ENLACES_GOOGLE_FORMS_DEFAULT.bienestar_salud;
+  };
 
   const [encuestaActiva, setEncuestaActiva] = useState<TipoEncuesta>('evaluacion_encargados');
   const [vistaAdmin, setVistaAdmin] = useState<'responder' | 'analiticas'>('responder');
@@ -579,7 +591,7 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
             </div>
 
             <a
-              href={ENLACES_GOOGLE_FORMS[encuestaActiva]}
+              href={obtenerEnlaceForm(encuestaActiva)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-[#061426] hover:bg-[#112240] text-[#cbd5e1] hover:text-white rounded-xl text-xs font-semibold border border-[#1e3555] transition-colors self-start sm:self-auto cursor-pointer"
@@ -1021,6 +1033,56 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
                 <span className="text-[11px] text-[#94a3b8] block mt-1">
                   Antes de esta fecha, los documentos y encuestas mostrarán el estatus de <strong>Cerrado hasta final del semestre</strong>.
                 </span>
+              </div>
+
+              {/* Enlaces Oficiales a Formularios de Google Forms */}
+              <div className="p-3.5 bg-[#061426] rounded-2xl border border-purple-500/30 space-y-3">
+                <div className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center space-x-1.5">
+                  <FileSpreadsheet className="w-4 h-4 text-purple-400" />
+                  <span>Vincular Formularios Oficiales Google Forms</span>
+                </div>
+                <p className="text-[11px] text-[#94a3b8]">
+                  Ingresa las URLs de los formularios de Google Forms creados en la cuenta oficial del departamento:
+                </p>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-purple-200 mb-1">
+                    1. Enlace Evaluación a Encargados Deportivos
+                  </label>
+                  <input
+                    type="url"
+                    value={formConfig.urlFormEvaluacionEncargados || ''}
+                    onChange={(e) => setFormConfig({ ...formConfig, urlFormEvaluacionEncargados: e.target.value })}
+                    placeholder="https://docs.google.com/forms/d/.../viewform"
+                    className="w-full p-2 bg-[#0a192f] border border-[#1e3555] rounded-xl text-xs text-white placeholder-[#64748b] focus:border-purple-400 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-purple-200 mb-1">
+                    2. Enlace Satisfacción de Servicios del Departamento
+                  </label>
+                  <input
+                    type="url"
+                    value={formConfig.urlFormSatisfaccionServicios || ''}
+                    onChange={(e) => setFormConfig({ ...formConfig, urlFormSatisfaccionServicios: e.target.value })}
+                    placeholder="https://docs.google.com/forms/d/.../viewform"
+                    className="w-full p-2 bg-[#0a192f] border border-[#1e3555] rounded-xl text-xs text-white placeholder-[#64748b] focus:border-purple-400 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-purple-200 mb-1">
+                    3. Enlace Percepción del Bienestar y Salud
+                  </label>
+                  <input
+                    type="url"
+                    value={formConfig.urlFormPercepcionBienestar || ''}
+                    onChange={(e) => setFormConfig({ ...formConfig, urlFormPercepcionBienestar: e.target.value })}
+                    placeholder="https://docs.google.com/forms/d/.../viewform"
+                    className="w-full p-2 bg-[#0a192f] border border-[#1e3555] rounded-xl text-xs text-white placeholder-[#64748b] focus:border-purple-400 font-mono"
+                  />
+                </div>
               </div>
 
               {/* Leyenda institucional requerida */}
