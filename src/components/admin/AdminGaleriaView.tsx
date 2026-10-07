@@ -101,8 +101,15 @@ export const AdminGaleriaView: React.FC = () => {
     const handleEscudoUpdate = () => {
       setEscudoActual(MSBDatabase.getEscudoActivo());
     };
+    const handleGaleriaUpdate = () => {
+      setFotos(MSBDatabase.getGaleriaActividades());
+    };
     window.addEventListener('msb_escudo_cambiado', handleEscudoUpdate);
-    return () => window.removeEventListener('msb_escudo_cambiado', handleEscudoUpdate);
+    window.addEventListener('msb_galeria_actualizada', handleGaleriaUpdate);
+    return () => {
+      window.removeEventListener('msb_escudo_cambiado', handleEscudoUpdate);
+      window.removeEventListener('msb_galeria_actualizada', handleGaleriaUpdate);
+    };
   }, []);
 
   const recargar = () => {
@@ -1113,17 +1120,36 @@ export const AdminGaleriaView: React.FC = () => {
               Elementos en Difusión Activa ({fotos.length})
             </h2>
             <p className="text-xs text-[#94a3b8]">
-              Administra, visualiza o elimina imágenes y videos del carrusel comunitario
+              Administra, visualiza o elimina imágenes, videos, firmas y sellos oficiales en la base maestra
             </p>
           </div>
-          <button
-            type="button"
-            onClick={recargar}
-            className="p-2 text-cyan-300 hover:text-white bg-[#061426] hover:bg-[#112240] rounded-xl border border-[#1e3555] cursor-pointer transition-colors"
-            title="Recargar galería"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => {
+                const auth = MSBDatabase.getAutoridades();
+                const esc = MSBDatabase.getEscudoActivo();
+                MSBDatabase.saveAutoridades(auth);
+                MSBDatabase.setEscudoActivo(esc);
+                setFotos(MSBDatabase.getGaleriaActividades());
+                setMensaje({ tipo: 'exito', texto: '✓ Firmas oficiales y Sello Institucional guardados y respaldados en la galería de la Base Maestra.' });
+                setTimeout(() => setMensaje(null), 4000);
+              }}
+              className="px-3 py-1.5 text-xs font-bold text-amber-300 hover:text-white bg-amber-950/60 hover:bg-amber-900 rounded-xl border border-amber-500/40 cursor-pointer transition-all flex items-center space-x-1.5"
+              title="Guardar y respaldar firmas de autoridades y sello institucional en la galería de la base maestra"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Respaldar Firmas y Sello en Galería</span>
+            </button>
+            <button
+              type="button"
+              onClick={recargar}
+              className="p-2 text-cyan-300 hover:text-white bg-[#061426] hover:bg-[#112240] rounded-xl border border-[#1e3555] cursor-pointer transition-colors"
+              title="Recargar galería"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {fotos.length === 0 ? (
@@ -1141,7 +1167,7 @@ export const AdminGaleriaView: React.FC = () => {
                   <img
                     src={item.url}
                     alt={item.titulo}
-                    className="w-full h-full object-cover opacity-85 group-hover:opacity-100 transition-opacity"
+                    className="w-full h-full object-contain p-1.5 bg-slate-900/60 opacity-90 group-hover:opacity-100 transition-opacity"
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?auto=format&fit=crop&w=600&q=80';
                     }}
@@ -1155,12 +1181,17 @@ export const AdminGaleriaView: React.FC = () => {
                   )}
 
                   <div className="absolute top-2 left-2 flex items-center space-x-1.5">
-                    {item.tipoMedio === 'video' && (
+                    {item.categoria === 'Firmas y Sellos Oficiales' ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 text-cyan-300 border border-cyan-500/50 flex items-center space-x-1 shadow-md">
+                        <ShieldCheck className="w-3 h-3 text-cyan-400" />
+                        <span>Firma/Sello</span>
+                      </span>
+                    ) : item.tipoMedio === 'video' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-500/50 flex items-center space-x-1 shadow-md">
                         <Video className="w-3 h-3" />
                         <span>Video</span>
                       </span>
-                    )}
+                    ) : null}
                     {item.destacada && (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-amber-950 flex items-center space-x-1 shadow-md">
                         <Sparkles className="w-2.5 h-2.5" />

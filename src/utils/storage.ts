@@ -137,6 +137,179 @@ export function limpiarTituloLicenciado(nombre?: string): string {
     .trim();
 }
 
+/**
+ * Normaliza y alinea cualquier registro de material/inventario proveniente de Google Sheets o LocalStorage
+ * garantizando que coincidan con las 11 columnas oficiales del sistema.
+ */
+export function normalizarMaterial(raw: any, index: number = 0): MaterialInventario {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      ID_material: `MAT-${String(index + 1).padStart(3, '0')}`,
+      Nombre_material: 'Material Sin Nombre',
+      Categoria: 'Recreativo',
+      Cantidad_total: 1,
+      Cantidad_disponible: 1,
+      Unidad: 'Piezas',
+      Ubicacion: 'Bodega de Deportes',
+      Condicion: 'Buena',
+      Responsable_ID: 'PAR-00001',
+      Estado: 'Disponible',
+      Observaciones: ''
+    };
+  }
+
+  // 1. Clave o Código ID
+  const id = raw.ID_material || raw.id_material || raw.ID || raw.id || raw.Codigo || raw.Código || `MAT-${String(index + 1).padStart(3, '0')}`;
+
+  // 2. Nombre descriptivo
+  const nombre = raw.Nombre_material || raw.nombre_material || raw.Nombre || raw.nombre || raw.Material || raw.material || raw.Descripcion || raw.Descripción || 'Material Sin Nombre';
+
+  // 3. Categoría (con corrección de acentos y sinónimos)
+  let cat = raw.Categoria || raw.categoria || raw.Categoría || raw.categoría || raw.Category || 'Recreativo';
+  if (/balon/i.test(cat)) cat = 'Balones';
+  else if (/entrena/i.test(cat)) cat = 'Entrenamiento';
+  else if (/salud|medici/i.test(cat)) cat = 'Salud y Medición';
+  else if (/sonido|evento/i.test(cat)) cat = 'Sonido y Eventos';
+  else cat = 'Recreativo';
+
+  // 4. Cantidad total
+  const totalNum = Number(raw.Cantidad_total ?? raw.cantidad_total ?? raw.Total ?? raw.total ?? raw.Cantidad ?? raw.cantidad ?? 1);
+  const cantidadTotal = isNaN(totalNum) ? 1 : Math.max(0, totalNum);
+
+  // 5. Cantidad disponible
+  const dispNum = Number(raw.Cantidad_disponible ?? raw.cantidad_disponible ?? raw.Disponible ?? raw.disponible ?? cantidadTotal);
+  const cantidadDisponible = isNaN(dispNum) ? cantidadTotal : Math.max(0, dispNum);
+
+  // 6. Unidad de medida
+  const unidad = raw.Unidad || raw.unidad || raw.Unidad_medida || raw.UnidadMedida || 'Piezas';
+
+  // 7. Ubicación
+  const ubicacion = raw.Ubicacion || raw.ubicacion || raw.Ubicación || raw.ubicación || raw.Lugar || 'Bodega de Deportes';
+
+  // 8. Condición física
+  let condicion = raw.Condicion || raw.condicion || raw.Condición || raw.condición || 'Buena';
+  if (/excel/i.test(condicion)) condicion = 'Excelente';
+  else if (/regul/i.test(condicion)) condicion = 'Regular';
+  else condicion = 'Buena';
+
+  // 9. Responsable ID
+  const responsable = raw.Responsable_ID || raw.responsable_id || raw.Responsable || 'PAR-00001';
+
+  // 10. Estado operativo
+  let estado = raw.Estado || raw.estado || raw.Estatus || raw.estatus || 'Disponible';
+  if (/prest/i.test(estado)) estado = 'En préstamo';
+  else if (/repar/i.test(estado)) estado = 'En reparación';
+  else if (/baja/i.test(estado)) estado = 'Baja';
+  else estado = 'Disponible';
+
+  // 11. Observaciones
+  const observaciones = raw.Observaciones || raw.observaciones || raw.Notas || raw.notas || '';
+
+  return {
+    ID_material: String(id).trim(),
+    Nombre_material: String(nombre).trim(),
+    Categoria: cat as any,
+    Cantidad_total: cantidadTotal,
+    Cantidad_disponible: cantidadDisponible,
+    Unidad: String(unidad).trim(),
+    Ubicacion: String(ubicacion).trim(),
+    Condicion: condicion as any,
+    Responsable_ID: String(responsable).trim(),
+    Estado: estado as any,
+    Observaciones: String(observaciones).trim()
+  };
+}
+
+/**
+ * Normaliza cualquier respuesta de evaluación (de Plataforma, Google Sheets o Google Forms)
+ * para que coincida perfectamente con el esquema analítico del Administrador.
+ */
+export function normalizarEvaluacion(raw: any, index: number = 0): import('../types').RespuestaEncuesta {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      idRespuesta: `ENC-${String(index + 1).padStart(3, '0')}`,
+      tipoEncuesta: 'satisfaccion_servicios',
+      tituloEncuesta: 'Satisfacción de Servicios',
+      fechaRegistro: msb_obtenerFechaHoraLocal(),
+      respuestas: {},
+      puntuacionPromedio: 5
+    };
+  }
+
+  const idRespuesta = raw.idRespuesta || raw.id || raw.ID || `ENC-${String(index + 1).padStart(3, '0')}`;
+  
+  // Determinar tipoEncuesta si no viene explícito
+  let tipoEncuesta: import('../types').TipoEncuesta = raw.tipoEncuesta || raw.tipo || 'satisfaccion_servicios';
+  if (!raw.tipoEncuesta) {
+    if (raw.encargadoClubId || raw.p3_desempenoEncargado || raw.dominioTecnico || /encargado/i.test(raw.tituloEncuesta || '') || /desempeno/i.test(raw.tituloEncuesta || '')) {
+      tipoEncuesta = 'evaluacion_encargados';
+    } else if (raw.nivelEnergia || raw.reduccionEstres || /bienestar/i.test(raw.tituloEncuesta || '')) {
+      tipoEncuesta = 'bienestar_salud';
+    } else {
+      tipoEncuesta = 'satisfaccion_servicios';
+    }
+  }
+
+  const tituloEncuesta = raw.tituloEncuesta || (
+    tipoEncuesta === 'evaluacion_encargados' ? 'Evaluación de Desempeño a Encargados Deportivos' :
+    tipoEncuesta === 'bienestar_salud' ? 'Percepción de Bienestar en Salud y Cultura Física' :
+    'Satisfacción de Servicios del Departamento de Deporte y Salud'
+  );
+
+  let respuestas: Record<string, any> = {};
+  if (raw.respuestas && typeof raw.respuestas === 'object') {
+    respuestas = { ...raw.respuestas };
+  } else if (typeof raw.respuestas_json === 'string' && raw.respuestas_json.startsWith('{')) {
+    try {
+      respuestas = JSON.parse(raw.respuestas_json);
+    } catch {}
+  } else {
+    // Si viene de columnas planas (Google Forms o formato previo):
+    const campos = [
+      'p1_satisfaccionGeneral', 'p2_calidadInstalaciones', 'p3_desempenoEncargado', 'p4_cumplimientoHorarios', 
+      'p5_ambienteConvivencia', 'p6_beneficioSalud', 'p7_recomendariaActividad', 'puntualidad', 'dominioTecnico', 
+      'respetoYTrato', 'fomentoSalud', 'claridadInstrucciones', 'atencionPersonal', 'estadoMateriales', 
+      'limpiezaEspacios', 'tiempoRespuesta', 'utilidadPausasActivas', 'nivelEnergia', 'reduccionEstres', 
+      'habitoSaludable', 'impactoAcademico', 'sentidoComunidad'
+    ];
+    campos.forEach(k => {
+      if (raw[k] !== undefined && raw[k] !== '') {
+        const val = Number(raw[k]);
+        respuestas[k] = isNaN(val) ? raw[k] : val;
+      }
+    });
+  }
+
+  // Calcular puntuacionPromedio si falta
+  let puntuacionPromedio = Number(raw.puntuacionPromedio || raw.promedio || 0);
+  if (!puntuacionPromedio || isNaN(puntuacionPromedio)) {
+    const numValues = Object.values(respuestas).map(Number).filter(n => !isNaN(n) && n > 0 && n <= 5);
+    if (numValues.length > 0) {
+      puntuacionPromedio = Number((numValues.reduce((a, b) => a + b, 0) / numValues.length).toFixed(1));
+    } else {
+      puntuacionPromedio = 5;
+    }
+  }
+
+  const fecha = raw.fechaRegistro || raw.fechaEvaluacion || raw.fecha || msb_obtenerFechaHoraLocal();
+
+  return {
+    idRespuesta: String(idRespuesta).trim(),
+    tipoEncuesta,
+    tituloEncuesta,
+    idUsuario: 'ANONIMO',
+    nombreUsuario: 'Participante Anónimo',
+    correoUsuario: undefined,
+    sector: raw.sector || 'Comunidad Normalista',
+    idActividad: raw.idActividad || 'GENERAL',
+    nombreActividad: raw.nombreActividad || (raw.idActividad === 'GENERAL' ? 'Departamento de Deporte y Salud' : 'Club Deportivo'),
+    fechaRegistro: String(fecha).trim(),
+    respuestas,
+    puntuacionPromedio,
+    comentarios: raw.comentarios || raw.Comentarios || ''
+  };
+}
+
 // Helper to determine request priority based on role, purpose, and explicit admin selection
 export function calcularPrioridadSolicitud(
   rol: RolUsuario, 
@@ -1065,11 +1238,17 @@ export class MSBDatabase {
   }
 
   static getInventario(): MaterialInventario[] {
-    return getStored<MaterialInventario[]>('INVENTARIO', SEED_INVENTARIO);
+    const rawList = getStored<any[]>('INVENTARIO', SEED_INVENTARIO);
+    return rawList.map((m, idx) => normalizarMaterial(m, idx));
   }
 
   static saveInventario(data: MaterialInventario[]) {
-    setStored('INVENTARIO', data);
+    const norm = data.map((m, idx) => normalizarMaterial(m, idx));
+    setStored('INVENTARIO', norm);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('msb_datos_actualizados'));
+    }
+    this.postToGoogleSheets({ action: 'guardarInventario', inventario: norm });
   }
 
   static getSolicitudes(): Solicitud[] {
@@ -1107,14 +1286,19 @@ export class MSBDatabase {
 
   // CRUD Materiales (Altas, Bajas y Edición)
   static saveMaterial(item: MaterialInventario): void {
+    const norm = normalizarMaterial(item);
     const list = this.getInventario();
-    const idx = list.findIndex(m => m.ID_material === item.ID_material);
+    const idx = list.findIndex(m => m.ID_material === norm.ID_material);
     if (idx >= 0) {
-      list[idx] = item;
+      list[idx] = norm;
     } else {
-      list.push(item);
+      list.push(norm);
     }
-    this.saveInventario(list);
+    setStored('INVENTARIO', list);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('msb_datos_actualizados'));
+    }
+    this.postToGoogleSheets({ action: 'guardarMaterial', material: norm });
   }
 
   static deleteMaterial(id: string): void {
@@ -2084,6 +2268,54 @@ export class MSBDatabase {
 
   static async saveAutoridades(data: AutoridadesConfig): Promise<void> {
     setStored('AUTORIDADES', data);
+    
+    // Respaldar también las firmas en la Galería Oficial de la Base Maestra
+    const galeria = this.getGaleriaActividades();
+    let galeriaModificada = false;
+
+    if (data.jefeMatutinoFirma && data.jefeMatutinoFirma.trim() !== '') {
+      const idxM = galeria.findIndex(g => g.id === 'FIRMA-OFICIAL-MATUTINO');
+      const itemM: ImagenActividad = {
+        id: 'FIRMA-OFICIAL-MATUTINO',
+        titulo: `Firma Oficial Matutino - ${data.jefeMatutinoNombre || 'Sandra Nelly Martínez'}`,
+        descripcion: `Firma digitalizada de Jefatura del Depto. de Deporte y Salud - Turno Matutino (${data.jefeMatutinoCargo || 'Turno matutino'}).`,
+        fecha: msb_obtenerFechaHoraLocal(),
+        categoria: 'Firmas y Sellos Oficiales',
+        url: data.jefeMatutinoFirma,
+        tipoMedio: 'foto',
+        autor: data.jefeMatutinoNombre || 'Jefatura Matutina',
+        destacada: true
+      };
+      if (idxM >= 0) galeria[idxM] = itemM; else galeria.unshift(itemM);
+      galeriaModificada = true;
+      this.postToGoogleSheets({ action: 'guardarItemGaleria', item: itemM });
+    }
+
+    if (data.jefeVespertinoFirma && data.jefeVespertinoFirma.trim() !== '') {
+      const idxV = galeria.findIndex(g => g.id === 'FIRMA-OFICIAL-VESPERTINO');
+      const itemV: ImagenActividad = {
+        id: 'FIRMA-OFICIAL-VESPERTINO',
+        titulo: `Firma Oficial Vespertino - ${data.jefeVespertinoNombre || 'Arturo Rodríguez'}`,
+        descripcion: `Firma digitalizada de Jefatura del Depto. de Deporte y Salud - Turno Vespertino (${data.jefeVespertinoCargo || 'Turno vespertino'}).`,
+        fecha: msb_obtenerFechaHoraLocal(),
+        categoria: 'Firmas y Sellos Oficiales',
+        url: data.jefeVespertinoFirma,
+        tipoMedio: 'foto',
+        autor: data.jefeVespertinoNombre || 'Jefatura Vespertina',
+        destacada: true
+      };
+      if (idxV >= 0) galeria[idxV] = itemV; else galeria.unshift(itemV);
+      galeriaModificada = true;
+      this.postToGoogleSheets({ action: 'guardarItemGaleria', item: itemV });
+    }
+
+    if (galeriaModificada) {
+      setStored('GALERIA_ACTIVIDADES', galeria);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('msb_galeria_actualizada'));
+      }
+    }
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('msb_autoridades_actualizadas', { detail: data }));
       window.dispatchEvent(new Event('msb_datos_actualizados'));
@@ -2093,14 +2325,14 @@ export class MSBDatabase {
 
   // ================= EVALUACIONES Y ENCUESTAS DEL DEPARTAMENTO (CONFIDENCIALES Y ANÓNIMAS) =================
   static getRespuestasEncuestas(): import('../types').RespuestaEncuesta[] {
-    return getStored<import('../types').RespuestaEncuesta[]>('RESPUESTAS_ENCUESTAS', [
+    const defaultEncuestas = [
       {
         idRespuesta: 'ENC-001',
-        tipoEncuesta: 'evaluacion_encargados',
+        tipoEncuesta: 'evaluacion_encargados' as const,
         tituloEncuesta: 'Evaluación de Desempeño a Encargados Deportivos',
         idUsuario: 'PAR-ANONIMO',
         nombreUsuario: 'Participante Anónimo',
-        sector: 'Estudiante',
+        sector: 'Estudiante' as const,
         idActividad: 'ACT-001',
         nombreActividad: 'Taller de Voleibol Mixto Normalista',
         fechaRegistro: '2026-09-25 11:20:00',
@@ -2116,11 +2348,11 @@ export class MSBDatabase {
       },
       {
         idRespuesta: 'ENC-002',
-        tipoEncuesta: 'satisfaccion_servicios',
+        tipoEncuesta: 'satisfaccion_servicios' as const,
         tituloEncuesta: 'Satisfacción de Servicios del Departamento de Deporte y Salud',
         idUsuario: 'PAR-ANONIMO',
         nombreUsuario: 'Participante Anónimo',
-        sector: 'Empleado',
+        sector: 'Empleado' as const,
         idActividad: 'GENERAL',
         nombreActividad: 'Servicios Generales del Departamento',
         fechaRegistro: '2026-09-26 14:15:00',
@@ -2136,11 +2368,11 @@ export class MSBDatabase {
       },
       {
         idRespuesta: 'ENC-003',
-        tipoEncuesta: 'bienestar_salud',
+        tipoEncuesta: 'bienestar_salud' as const,
         tituloEncuesta: 'Percepción de Bienestar en Salud y Cultura Física',
         idUsuario: 'PAR-ANONIMO',
         nombreUsuario: 'Participante Anónimo',
-        sector: 'Estudiante',
+        sector: 'Estudiante' as const,
         idActividad: 'ACT-003',
         nombreActividad: 'Fútbol Asociación Varonil',
         fechaRegistro: '2026-09-28 16:30:00',
@@ -2154,7 +2386,10 @@ export class MSBDatabase {
         },
         comentarios: 'Me siento con mayor resistencia física y concentración para mis jornadas de práctica docente.'
       }
-    ]);
+    ];
+
+    const stored = getStored<any[]>('RESPUESTAS_ENCUESTAS', defaultEncuestas);
+    return stored.map((r, idx) => normalizarEvaluacion(r, idx));
   }
 
   static guardarRespuestaEncuesta(respuesta: Omit<import('../types').RespuestaEncuesta, 'idRespuesta'>): { ok: boolean; idRespuesta: string; mensaje: string } {
@@ -2163,15 +2398,18 @@ export class MSBDatabase {
     
     // Principio estricto de anonimato institucional (Normas ISO 27701 e ISO 27001):
     // Nunca almacenar ni exponer nombres personales o correos en las evaluaciones.
-    const nueva: import('../types').RespuestaEncuesta = {
+    const nueva = normalizarEvaluacion({
       ...respuesta,
       idRespuesta,
       nombreUsuario: 'Participante Anónimo',
       correoUsuario: undefined,
       idUsuario: 'ANONIMO'
-    };
+    });
     list.unshift(nueva);
     setStored('RESPUESTAS_ENCUESTAS', list);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('msb_datos_actualizados'));
+    }
     this.postToGoogleSheets({ action: 'guardarEvaluacion', evaluacion: nueva });
     return { ok: true, idRespuesta, mensaje: '✓ Evaluación anónima registrada exitosamente. ¡Gracias por tu valiosa retroalimentación!' };
   }
@@ -2345,13 +2583,12 @@ export class MSBDatabase {
 
   // Live Google Sheets Web App Connection (Fijo y Global en Código)
   static getAppsScriptUrl(): string {
-    const saved = localStorage.getItem('MSB_APPS_SCRIPT_URL');
-    if (saved && saved.trim() !== '' && saved.includes('script.google.com')) {
-      // Si el guardado es el nuevo o uno personalizado válido, usarlo
-      if (saved.includes('AKfycbzCzli')) {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('MSB_APPS_SCRIPT_URL') : null;
+      if (saved && saved.trim() !== '' && saved.includes('script.google.com')) {
         return saved.trim();
       }
-    }
+    } catch {}
     return CONFIG.DEFAULT_APPS_SCRIPT_URL || '';
   }
 
@@ -2473,22 +2710,58 @@ export class MSBDatabase {
       if (data && data.ok) {
         if (Array.isArray(data.actividades) && data.actividades.length > 0) this.saveActividades(data.actividades);
         if (Array.isArray(data.espacios) && data.espacios.length > 0) this.saveEspacios(data.espacios);
-        if (Array.isArray(data.inventario) && data.inventario.length > 0) this.saveInventario(data.inventario);
+        if (Array.isArray(data.inventario) && data.inventario.length > 0) {
+          const normInv = data.inventario.map((m: any, idx: number) => normalizarMaterial(m, idx));
+          setStored('INVENTARIO', normInv);
+        }
         if (Array.isArray(data.solicitudes)) this.saveSolicitudes(data.solicitudes);
         if (Array.isArray(data.inscripciones)) this.saveInscripciones(data.inscripciones);
         if (Array.isArray(data.identidades) && data.identidades.length > 0) this.saveIdentidades(data.identidades);
         
-        // Sincronización comunitaria de Galería (Fotos y Videos visibles en todos los dispositivos)
+        // Sincronización comunitaria de Galería (Fotos, Videos, Firmas y Sellos visibles en todos los dispositivos)
         if (Array.isArray(data.galeria) && data.galeria.length > 0) {
           setStored('GALERIA_ACTIVIDADES', data.galeria);
+
+          // Si la galería contiene las firmas de autoridades respaldadas en la Base Maestra, restaurarlas
+          const firmaMat = data.galeria.find((g: any) => g.id === 'FIRMA-OFICIAL-MATUTINO');
+          const firmaVesp = data.galeria.find((g: any) => g.id === 'FIRMA-OFICIAL-VESPERTINO');
+          const selloItem = data.galeria.find((g: any) => g.id === 'SELLO-INSTITUCIONAL-OFICIAL');
+
+          if (firmaMat?.url || firmaVesp?.url) {
+            const actualAuth = this.getAutoridades();
+            const restauradaAuth: AutoridadesConfig = {
+              ...actualAuth,
+              jefeMatutinoFirma: firmaMat?.url || actualAuth.jefeMatutinoFirma,
+              jefeVespertinoFirma: firmaVesp?.url || actualAuth.jefeVespertinoFirma
+            };
+            setStored('AUTORIDADES', restauradaAuth);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('msb_autoridades_actualizadas', { detail: restauradaAuth }));
+            }
+          }
+
+          if (selloItem?.url) {
+            const actualEsc = this.getEscudoActivo();
+            const nuevoEsc = {
+              ...actualEsc,
+              url: selloItem.url,
+              nombre: selloItem.descripcion || actualEsc.nombre
+            };
+            setStored('MSB_ESCUDO_ACTIVO', nuevoEsc);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('msb_escudo_cambiado', { detail: nuevoEsc }));
+            }
+          }
+
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new Event('msb_galeria_actualizada'));
           }
         }
 
-        // Sincronización de Evaluaciones y Pruebas Físicas
+        // Sincronización de Evaluaciones (Plataforma y Forms) y Pruebas Físicas
         if (Array.isArray(data.evaluaciones) && data.evaluaciones.length > 0) {
-          setStored('RESPUESTAS_ENCUESTAS', data.evaluaciones);
+          const normEv = data.evaluaciones.map((e: any, idx: number) => normalizarEvaluacion(e, idx));
+          setStored('RESPUESTAS_ENCUESTAS', normEv);
         }
         if (Array.isArray(data.pruebas_fisicas) && data.pruebas_fisicas.length > 0) {
           this.saveEvaluacionesFisicas(data.pruebas_fisicas);
@@ -2499,9 +2772,17 @@ export class MSBDatabase {
         
         // Sincronización de Autoridades y Firmas Oficiales
         if (data.autoridades && typeof data.autoridades === 'object') {
-          setStored('AUTORIDADES', data.autoridades);
+          const actualAuth = this.getAutoridades();
+          const mergedAuth: AutoridadesConfig = {
+            ...actualAuth,
+            ...data.autoridades,
+            // Proteger firmas para no sobreescribir con vacío si ya existen firmas locales válidas
+            jefeMatutinoFirma: data.autoridades.jefeMatutinoFirma || actualAuth.jefeMatutinoFirma,
+            jefeVespertinoFirma: data.autoridades.jefeVespertinoFirma || actualAuth.jefeVespertinoFirma
+          };
+          setStored('AUTORIDADES', mergedAuth);
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('msb_autoridades_actualizadas', { detail: data.autoridades }));
+            window.dispatchEvent(new CustomEvent('msb_autoridades_actualizadas', { detail: mergedAuth }));
           }
         }
 
@@ -2512,6 +2793,20 @@ export class MSBDatabase {
             ...actualCfg,
             ...data.configEvaluaciones
           });
+        }
+
+        // Si la base maestra envió sello activo directo
+        if (data.sello_activo && data.sello_activo.url) {
+          const actualEsc = this.getEscudoActivo();
+          const nuevoEsc = {
+            ...actualEsc,
+            url: data.sello_activo.url,
+            nombre: data.sello_activo.nombre || actualEsc.nombre
+          };
+          setStored('MSB_ESCUDO_ACTIVO', nuevoEsc);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('msb_escudo_cambiado', { detail: nuevoEsc }));
+          }
         }
         
         if (typeof window !== 'undefined') {
@@ -2561,7 +2856,11 @@ export class MSBDatabase {
       tipo: 'institucional' as const,
       nombre: 'Escudo Oficial - Escuela Normal Miguel F. Martínez'
     };
-    return getStored('MSB_ESCUDO_ACTIVO', defaultEscudo);
+    const stored = getStored<any>('MSB_ESCUDO_ACTIVO', defaultEscudo);
+    if (!stored || !stored.url || stored.url.trim() === '') {
+      return defaultEscudo;
+    }
+    return stored;
   }
 
   static setEscudoActivo(datos: {
@@ -2569,17 +2868,42 @@ export class MSBDatabase {
     tipo: 'institucional' | 'departamento' | 'ganador' | 'personalizado';
     nombre: string;
   }): { ok: boolean; mensaje: string } {
+    const urlSegura = datos.url && datos.url.trim() !== '' ? datos.url : '/SELLO.png';
     const payload = {
       ...datos,
-      fechaActualizacion: new Date().toISOString()
+      url: urlSegura,
+      fechaActualizacion: msb_obtenerFechaHoraLocal()
     };
     setStored('MSB_ESCUDO_ACTIVO', payload);
+
+    // Respaldar también el Sello Oficial en la Galería de la Base Maestra
+    const galeria = this.getGaleriaActividades();
+    const idxS = galeria.findIndex(g => g.id === 'SELLO-INSTITUCIONAL-OFICIAL');
+    const itemSello: ImagenActividad = {
+      id: 'SELLO-INSTITUCIONAL-OFICIAL',
+      titulo: 'Sello / Escudo Institucional Oficial ENMFM',
+      descripcion: datos.nombre || 'Escudo Oficial - Escuela Normal Miguel F. Martínez',
+      fecha: msb_obtenerFechaHoraLocal(),
+      categoria: 'Firmas y Sellos Oficiales',
+      url: urlSegura,
+      tipoMedio: 'foto',
+      autor: 'ENMFM',
+      destacada: true
+    };
+    if (idxS >= 0) galeria[idxS] = itemSello; else galeria.unshift(itemSello);
+    setStored('GALERIA_ACTIVIDADES', galeria);
+
     // Notificar reactivamente a toda la aplicación
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('msb_escudo_cambiado', { detail: payload }));
+      window.dispatchEvent(new Event('msb_galeria_actualizada'));
+      window.dispatchEvent(new Event('msb_datos_actualizados'));
     }
+
     this.postToGoogleSheets({ action: 'guardarEscudo', escudo: payload });
-    return { ok: true, mensaje: 'Escudo actualizado exitosamente.' };
+    this.postToGoogleSheets({ action: 'guardarItemGaleria', item: itemSello });
+
+    return { ok: true, mensaje: 'Escudo actualizado y respaldado en la galería de la base maestra.' };
   }
 
   static resetEscudoOficial(): void {
@@ -2977,18 +3301,20 @@ function doGet(e) {
   if (action === 'obtenerTodo') {
     var actHoja = msb_getHojaSegura(ss, 'Actividades', ['ID_actividad','Nombre','Descripción','Tipo','Cupo']);
     var espHoja = msb_getHojaSegura(ss, 'Espacios', ['ID_espacio','Nombre','Ubicación','Capacidad']);
-    var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoría','Estado']);
+    var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible','Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones']);
     var solHoja = msb_getHojaSegura(ss, 'Solicitudes', ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones']);
     var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
     var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
     var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
-    var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','idActividad','nombreActividad','categoria','p1_satisfaccionGeneral','p2_calidadInstalaciones','p3_desempenoEncargado','p4_cumplimientoHorarios','p5_ambienteConvivencia','p6_beneficioSalud','p7_recomendariaActividad','comentarios','fechaEvaluacion','idUsuario','nombreUsuario']);
+    var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','tipoEncuesta','tituloEncuesta','idActividad','nombreActividad','sector','puntuacionPromedio','respuestas_json','comentarios','fechaRegistro','idUsuario','nombreUsuario']);
     var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas', ['idEvaluacion','idParticipante','nombreParticipante','fechaRegistro','puntuacionGeneral','categoriaRendimiento','inicial_json','final_json']);
     var autHoja = msb_getHojaSegura(ss, 'Autoridades', ['tituloJefatura','jefeMatutinoNombre','jefeMatutinoCargo','jefeMatutinoFirma','jefeVespertinoNombre','jefeVespertinoCargo','jefeVespertinoFirma','ultimaActualizacion']);
     var cfgHoja = msb_getHojaSegura(ss, 'Config_Evaluaciones', ['habilitada','fechaHabilitacion','urlFormEvaluacionEncargados','urlFormSatisfaccionServicios','urlFormPercepcionBienestar','mensajeAccesoRestringido','ultimaActualizacion']);
+    var escHoja = msb_getHojaSegura(ss, 'Sello_Activo', ['url','tipo','nombre','fechaActualizacion']);
 
     var autList = msb_getAllObjects(autHoja, msb_getHeaders(autHoja));
     var cfgList = msb_getAllObjects(cfgHoja, msb_getHeaders(cfgHoja));
+    var escList = msb_getAllObjects(escHoja, msb_getHeaders(escHoja));
 
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
@@ -3002,7 +3328,8 @@ function doGet(e) {
       evaluaciones: msb_getAllObjects(evHoja, msb_getHeaders(evHoja)),
       pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja)),
       autoridades: autList.length ? autList[0] : null,
-      configEvaluaciones: cfgList.length ? cfgList[0] : null
+      configEvaluaciones: cfgList.length ? cfgList[0] : null,
+      sello_activo: escList.length ? escList[0] : null
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -3119,10 +3446,12 @@ function doPost(e) {
       ]);
       var a = postData.autoridades;
       var ahora = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var firmaMatCorta = String(a.jefeMatutinoFirma || '').substring(0, 48000);
+      var firmaVespCorta = String(a.jefeVespertinoFirma || '').substring(0, 48000);
       var filaAut = [
         a.tituloJefatura || 'Jefes del Departamento de Deporte y Salud',
-        a.jefeMatutinoNombre || '', a.jefeMatutinoCargo || '', a.jefeMatutinoFirma || '',
-        a.jefeVespertinoNombre || '', a.jefeVespertinoCargo || '', a.jefeVespertinoFirma || '',
+        a.jefeMatutinoNombre || '', a.jefeMatutinoCargo || '', firmaMatCorta,
+        a.jefeVespertinoNombre || '', a.jefeVespertinoCargo || '', firmaVespCorta,
         ahora
       ];
       if (autHoja.getLastRow() >= 2) {
@@ -3158,18 +3487,35 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Configuración de evaluaciones y enlaces Google Forms guardados en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 8. Guardar Evaluación de Servicio
+    // 8. Guardar Evaluación de Servicio (Plataforma y Formularios)
     if (action === 'guardarEvaluacion' && postData.evaluacion) {
-      var evHoja = msb_getHojaSegura(ss, 'Evaluaciones');
-      var ev = postData.evaluacion;
-      evHoja.appendRow([
-        ev.idRespuesta, ev.idActividad, ev.nombreActividad, ev.categoria,
-        ev.p1_satisfaccionGeneral, ev.p2_calidadInstalaciones, ev.p3_desempenoEncargado,
-        ev.p4_cumplimientoHorarios, ev.p5_ambienteConvivencia, ev.p6_beneficioSalud,
-        ev.p7_recomendariaActividad, ev.comentarios || '', ev.fechaEvaluacion,
-        'ANONIMO', 'Participante Anónimo'
+      var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', [
+        'idRespuesta','tipoEncuesta','tituloEncuesta','idActividad','nombreActividad',
+        'sector','puntuacionPromedio','respuestas_json','comentarios','fechaRegistro','idUsuario','nombreUsuario'
       ]);
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Evaluación sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+      var ev = postData.evaluacion;
+      var filaEv = msb_buscarFilaPorValor(evHoja, 1, ev.idRespuesta);
+      var ahoraEv = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var filaEvValores = [
+        ev.idRespuesta || ('ENC-' + new Date().getTime()),
+        ev.tipoEncuesta || 'satisfaccion_servicios',
+        ev.tituloEncuesta || 'Evaluación del Departamento',
+        ev.idActividad || 'GENERAL',
+        ev.nombreActividad || 'Departamento de Deporte y Salud',
+        ev.sector || 'Comunidad Normalista',
+        ev.puntuacionPromedio || 5,
+        JSON.stringify(ev.respuestas || {}),
+        ev.comentarios || '',
+        ev.fechaRegistro || ahoraEv,
+        'ANONIMO',
+        'Participante Anónimo'
+      ];
+      if (filaEv > 0) {
+        evHoja.getRange(filaEv, 1, 1, filaEvValores.length).setValues([filaEvValores]);
+      } else {
+        evHoja.appendRow(filaEvValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Evaluación sincronizada en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
     }
 
     // 9. Guardar Pruebas Físicas
@@ -3196,12 +3542,90 @@ function doPost(e) {
       galHoja.clearContents();
       galHoja.appendRow(['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
       postData.galeria.forEach(function(g) {
+        var urlCorta = String(g.url || '').substring(0, 48000);
         galHoja.appendRow([
           g.id || '', g.titulo || '', g.descripcion || '', g.fecha || '', g.categoria || '',
-          g.url || '', g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
+          urlCorta, g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
         ]);
       });
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Galería sincronizada globalmente' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 11. Guardar Item Individual en Galería (Firmas Oficiales, Sellos, Fotos)
+    if (action === 'guardarItemGaleria' && postData.item) {
+      var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      var g = postData.item;
+      var filaG = msb_buscarFilaPorValor(galHoja, 1, g.id);
+      var urlCorta = String(g.url || '').substring(0, 48000);
+      var filaGValores = [
+        g.id || '', g.titulo || '', g.descripcion || '', g.fecha || '', g.categoria || 'Firmas y Sellos Oficiales',
+        urlCorta, g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
+      ];
+      if (filaG > 0) {
+        galHoja.getRange(filaG, 1, 1, filaGValores.length).setValues([filaGValores]);
+      } else {
+        galHoja.appendRow(filaGValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Item guardado en Galería de la Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 12. Guardar Escudo / Sello Activo Institucional
+    if (action === 'guardarEscudo' && postData.escudo) {
+      var escHoja = msb_getHojaSegura(ss, 'Sello_Activo', ['url', 'tipo', 'nombre', 'fechaActualizacion']);
+      var esc = postData.escudo;
+      var urlEsc = String(esc.url || '').substring(0, 48000);
+      var ahoraEsc = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var filaEsc = [urlEsc, esc.tipo || 'institucional', esc.nombre || 'Escudo Oficial', ahoraEsc];
+      if (escHoja.getLastRow() >= 2) {
+        escHoja.getRange(2, 1, 1, filaEsc.length).setValues([filaEsc]);
+      } else {
+        escHoja.appendRow(filaEsc);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Sello institucional guardado en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 13. Guardar / Actualizar Material en Inventario (con las 11 columnas exactas)
+    if (action === 'guardarMaterial' && postData.material) {
+      var invHoja = msb_getHojaSegura(ss, 'Inventario', [
+        'ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible',
+        'Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones'
+      ]);
+      var m = postData.material;
+      var filaMat = msb_buscarFilaPorValor(invHoja, 1, m.ID_material);
+      var filaMatValores = [
+        m.ID_material, m.Nombre_material, m.Categoria || 'Recreativo',
+        m.Cantidad_total || 0, m.Cantidad_disponible || 0, m.Unidad || 'Piezas',
+        m.Ubicacion || 'Bodega de Deportes', m.Condicion || 'Buena',
+        m.Responsable_ID || 'PAR-00001', m.Estado || 'Disponible', m.Observaciones || ''
+      ];
+      if (filaMat > 0) {
+        invHoja.getRange(filaMat, 1, 1, filaMatValores.length).setValues([filaMatValores]);
+      } else {
+        invHoja.appendRow(filaMatValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Material sincronizado en Inventario' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 14. Sincronizar Inventario Completo
+    if (action === 'guardarInventario' && Array.isArray(postData.inventario)) {
+      var invHoja = msb_getHojaSegura(ss, 'Inventario', [
+        'ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible',
+        'Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones'
+      ]);
+      invHoja.clearContents();
+      invHoja.appendRow([
+        'ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible',
+        'Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones'
+      ]);
+      postData.inventario.forEach(function(m) {
+        invHoja.appendRow([
+          m.ID_material, m.Nombre_material, m.Categoria || 'Recreativo',
+          m.Cantidad_total || 0, m.Cantidad_disponible || 0, m.Unidad || 'Piezas',
+          m.Ubicacion || 'Bodega de Deportes', m.Condicion || 'Buena',
+          m.Responsable_ID || 'PAR-00001', m.Estado || 'Disponible', m.Observaciones || ''
+        ]);
+      });
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Inventario sincronizado globalmente' })).setMimeType(ContentService.MimeType.JSON);
     }
 
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);

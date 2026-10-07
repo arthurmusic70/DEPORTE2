@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SesionUsuario, Actividad, TipoEncuesta, RespuestaEncuesta, ConfiguracionEvaluaciones } from '../types';
 import { MSBDatabase, CONFIG, limpiarTituloLicenciado, msb_obtenerFechaHoraLocal } from '../utils/storage';
 import { 
@@ -24,6 +24,8 @@ import {
   Clock,
   Save,
   FileSpreadsheet,
+  RefreshCw,
+  Info,
   X
 } from 'lucide-react';
 
@@ -40,8 +42,39 @@ const ENLACES_GOOGLE_FORMS_DEFAULT = {
 export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoViewProps> = ({ usuario }) => {
   const [configuracion, setConfiguracion] = useState<ConfiguracionEvaluaciones>(() => MSBDatabase.getConfiguracionEvaluaciones());
   const [modalConfiguracion, setModalConfiguracion] = useState(false);
+  const [modalGuiaForms, setModalGuiaForms] = useState(false);
   const [formConfig, setFormConfig] = useState<ConfiguracionEvaluaciones>(() => MSBDatabase.getConfiguracionEvaluaciones());
   const [avisoAdminGuardado, setAvisoAdminGuardado] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+
+  // Escuchar actualizaciones reactivas globales de la base de datos
+  useEffect(() => {
+    const handleActualizacion = () => {
+      setRespuestas(MSBDatabase.getRespuestasEncuestas());
+      setConfiguracion(MSBDatabase.getConfiguracionEvaluaciones());
+    };
+    window.addEventListener('msb_datos_actualizados', handleActualizacion);
+    return () => window.removeEventListener('msb_datos_actualizados', handleActualizacion);
+  }, []);
+
+  const handleSincronizarConBaseMaestra = async () => {
+    setSincronizando(true);
+    setMensajeExito(null);
+    try {
+      const res = await MSBDatabase.syncFromGoogleSheets();
+      if (res.ok) {
+        setRespuestas(MSBDatabase.getRespuestasEncuestas());
+        setMensajeExito('✓ Evaluaciones sincronizadas y actualizadas desde la Base Maestra.');
+        setTimeout(() => setMensajeExito(null), 4000);
+      } else {
+        alert(res.mensaje || 'Error al sincronizar');
+      }
+    } catch (e: any) {
+      alert(`Error al sincronizar: ${e.message}`);
+    } finally {
+      setSincronizando(false);
+    }
+  };
 
   // Obtener enlace configurado o predeterminado para cada formulario
   const obtenerEnlaceForm = (tipo: TipoEncuesta) => {
@@ -57,7 +90,7 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
   const [encuestaActiva, setEncuestaActiva] = useState<TipoEncuesta>('evaluacion_encargados');
   const [vistaAdmin, setVistaAdmin] = useState<'responder' | 'analiticas'>('responder');
   const [actividades] = useState<Actividad[]>(MSBDatabase.getActividades());
-  const [respuestas, setRespuestas] = useState<RespuestaEncuesta[]>(MSBDatabase.getRespuestasEncuestas());
+  const [respuestas, setRespuestas] = useState<RespuestaEncuesta[]>(() => MSBDatabase.getRespuestasEncuestas());
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
 
   // Formulario 1: Evaluación a Encargados
@@ -776,22 +809,45 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
               </p>
             </div>
             
-            {/* Selector de Filtro por Actividad / Club */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <span className="text-xs text-[#94a3b8] font-semibold whitespace-nowrap">Filtrar por Club:</span>
-              <select
-                value={filtroActividad}
-                onChange={(e) => setFiltroActividad(e.target.value)}
-                className="p-2 bg-[#061426] border border-[#1e3555] rounded-xl text-xs font-bold text-cyan-300 cursor-pointer focus:outline-none focus:border-blue-500"
+            {/* Acciones y Selector de Filtro por Actividad / Club */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSincronizarConBaseMaestra}
+                disabled={sincronizando}
+                className="px-3 py-2 bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-500/40 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                title="Sincronizar las evaluaciones registradas en la Base Maestra (Plataforma y Forms)"
               >
-                <option value="todas" className="bg-[#0a192f] text-white">-- Todas las Actividades y Clubes --</option>
-                <option value="GENERAL" className="bg-[#0a192f] text-white">-- Servicios Generales / Departamental --</option>
-                {actividades.map(a => (
-                  <option key={a.ID_actividad} value={a.ID_actividad} className="bg-[#0a192f] text-white">
-                    {a.Nombre}
-                  </option>
-                ))}
-              </select>
+                <RefreshCw className={`w-3.5 h-3.5 text-cyan-300 ${sincronizando ? 'animate-spin' : ''}`} />
+                <span>{sincronizando ? 'Sincronizando...' : 'Sincronizar Base Maestra'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setModalGuiaForms(true)}
+                className="px-3 py-2 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-500/40 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer"
+                title="Ver guía para vincular Google Forms con la Base Maestra y la Consola del Administrador"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-purple-300" />
+                <span>¿Cómo Vincular Google Forms?</span>
+              </button>
+
+              <div className="flex items-center space-x-1.5">
+                <span className="text-xs text-[#94a3b8] font-semibold whitespace-nowrap">Club:</span>
+                <select
+                  value={filtroActividad}
+                  onChange={(e) => setFiltroActividad(e.target.value)}
+                  className="p-2 bg-[#061426] border border-[#1e3555] rounded-xl text-xs font-bold text-cyan-300 cursor-pointer focus:outline-none focus:border-blue-500"
+                >
+                  <option value="todas" className="bg-[#0a192f] text-white">-- Todos los Clubes --</option>
+                  <option value="GENERAL" className="bg-[#0a192f] text-white">-- Departamental --</option>
+                  {actividades.map(a => (
+                    <option key={a.ID_actividad} value={a.ID_actividad} className="bg-[#0a192f] text-white">
+                      {a.Nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 

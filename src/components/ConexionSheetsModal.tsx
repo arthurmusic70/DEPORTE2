@@ -133,18 +133,20 @@ function doGet(e) {
   if (action === 'obtenerTodo') {
     var actHoja = msb_getHojaSegura(ss, 'Actividades', ['ID_actividad','Nombre','Descripción','Tipo','Cupo']);
     var espHoja = msb_getHojaSegura(ss, 'Espacios', ['ID_espacio','Nombre','Ubicación','Capacidad']);
-    var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoría','Estado']);
+    var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible','Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones']);
     var solHoja = msb_getHojaSegura(ss, 'Solicitudes', ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones']);
     var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
     var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
     var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
-    var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','idActividad','nombreActividad','categoria','p1_satisfaccionGeneral','p2_calidadInstalaciones','p3_desempenoEncargado','p4_cumplimientoHorarios','p5_ambienteConvivencia','p6_beneficioSalud','p7_recomendariaActividad','comentarios','fechaEvaluacion','idUsuario','nombreUsuario']);
+    var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','tipoEncuesta','tituloEncuesta','idActividad','nombreActividad','sector','puntuacionPromedio','respuestas_json','comentarios','fechaRegistro','idUsuario','nombreUsuario']);
     var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas', ['idEvaluacion','idParticipante','nombreParticipante','fechaRegistro','puntuacionGeneral','categoriaRendimiento','inicial_json','final_json']);
     var autHoja = msb_getHojaSegura(ss, 'Autoridades', ['tituloJefatura','jefeMatutinoNombre','jefeMatutinoCargo','jefeMatutinoFirma','jefeVespertinoNombre','jefeVespertinoCargo','jefeVespertinoFirma','ultimaActualizacion']);
     var cfgHoja = msb_getHojaSegura(ss, 'Config_Evaluaciones', ['habilitada','fechaHabilitacion','urlFormEvaluacionEncargados','urlFormSatisfaccionServicios','urlFormPercepcionBienestar','mensajeAccesoRestringido','ultimaActualizacion']);
+    var escHoja = msb_getHojaSegura(ss, 'Sello_Activo', ['url','tipo','nombre','fechaActualizacion']);
 
     var autList = msb_getAllObjects(autHoja, msb_getHeaders(autHoja));
     var cfgList = msb_getAllObjects(cfgHoja, msb_getHeaders(cfgHoja));
+    var escList = msb_getAllObjects(escHoja, msb_getHeaders(escHoja));
 
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
@@ -158,7 +160,8 @@ function doGet(e) {
       evaluaciones: msb_getAllObjects(evHoja, msb_getHeaders(evHoja)),
       pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja)),
       autoridades: autList.length ? autList[0] : null,
-      configEvaluaciones: cfgList.length ? cfgList[0] : null
+      configEvaluaciones: cfgList.length ? cfgList[0] : null,
+      sello_activo: escList.length ? escList[0] : null
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -275,10 +278,12 @@ function doPost(e) {
       ]);
       var a = postData.autoridades;
       var ahora = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var firmaMatCorta = String(a.jefeMatutinoFirma || '').substring(0, 48000);
+      var firmaVespCorta = String(a.jefeVespertinoFirma || '').substring(0, 48000);
       var filaAut = [
         a.tituloJefatura || 'Jefes del Departamento de Deporte y Salud',
-        a.jefeMatutinoNombre || '', a.jefeMatutinoCargo || '', a.jefeMatutinoFirma || '',
-        a.jefeVespertinoNombre || '', a.jefeVespertinoCargo || '', a.jefeVespertinoFirma || '',
+        a.jefeMatutinoNombre || '', a.jefeMatutinoCargo || '', firmaMatCorta,
+        a.jefeVespertinoNombre || '', a.jefeVespertinoCargo || '', firmaVespCorta,
         ahora
       ];
       if (autHoja.getLastRow() >= 2) {
@@ -314,18 +319,35 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Configuración de evaluaciones y enlaces Google Forms guardados en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 8. Guardar Evaluación de Servicio
+    // 8. Guardar Evaluación de Servicio (Plataforma y Formularios)
     if (action === 'guardarEvaluacion' && postData.evaluacion) {
-      var evHoja = msb_getHojaSegura(ss, 'Evaluaciones');
-      var ev = postData.evaluacion;
-      evHoja.appendRow([
-        ev.idRespuesta, ev.idActividad, ev.nombreActividad, ev.categoria,
-        ev.p1_satisfaccionGeneral, ev.p2_calidadInstalaciones, ev.p3_desempenoEncargado,
-        ev.p4_cumplimientoHorarios, ev.p5_ambienteConvivencia, ev.p6_beneficioSalud,
-        ev.p7_recomendariaActividad, ev.comentarios || '', ev.fechaEvaluacion,
-        'ANONIMO', 'Participante Anónimo'
+      var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', [
+        'idRespuesta','tipoEncuesta','tituloEncuesta','idActividad','nombreActividad',
+        'sector','puntuacionPromedio','respuestas_json','comentarios','fechaRegistro','idUsuario','nombreUsuario'
       ]);
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Evaluación sincronizada' })).setMimeType(ContentService.MimeType.JSON);
+      var ev = postData.evaluacion;
+      var filaEv = msb_buscarFilaPorValor(evHoja, 1, ev.idRespuesta);
+      var ahoraEv = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var filaEvValores = [
+        ev.idRespuesta || ('ENC-' + new Date().getTime()),
+        ev.tipoEncuesta || 'satisfaccion_servicios',
+        ev.tituloEncuesta || 'Evaluación del Departamento',
+        ev.idActividad || 'GENERAL',
+        ev.nombreActividad || 'Departamento de Deporte y Salud',
+        ev.sector || 'Comunidad Normalista',
+        ev.puntuacionPromedio || 5,
+        JSON.stringify(ev.respuestas || {}),
+        ev.comentarios || '',
+        ev.fechaRegistro || ahoraEv,
+        'ANONIMO',
+        'Participante Anónimo'
+      ];
+      if (filaEv > 0) {
+        evHoja.getRange(filaEv, 1, 1, filaEvValores.length).setValues([filaEvValores]);
+      } else {
+        evHoja.appendRow(filaEvValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Evaluación sincronizada en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
     }
 
     // 9. Guardar Pruebas Físicas
@@ -352,12 +374,90 @@ function doPost(e) {
       galHoja.clearContents();
       galHoja.appendRow(['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
       postData.galeria.forEach(function(g) {
+        var urlCorta = String(g.url || '').substring(0, 48000);
         galHoja.appendRow([
           g.id || '', g.titulo || '', g.descripcion || '', g.fecha || '', g.categoria || '',
-          g.url || '', g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
+          urlCorta, g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
         ]);
       });
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Galería sincronizada globalmente' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 11. Guardar Item Individual en Galería (Firmas Oficiales, Sellos, Fotos)
+    if (action === 'guardarItemGaleria' && postData.item) {
+      var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      var g = postData.item;
+      var filaG = msb_buscarFilaPorValor(galHoja, 1, g.id);
+      var urlCorta = String(g.url || '').substring(0, 48000);
+      var filaGValores = [
+        g.id || '', g.titulo || '', g.descripcion || '', g.fecha || '', g.categoria || 'Firmas y Sellos Oficiales',
+        urlCorta, g.tipoMedio || 'foto', g.videoUrl || '', g.tipoVideo || '', g.autor || '', g.destacada ? 'TRUE' : 'FALSE'
+      ];
+      if (filaG > 0) {
+        galHoja.getRange(filaG, 1, 1, filaGValores.length).setValues([filaGValores]);
+      } else {
+        galHoja.appendRow(filaGValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Item guardado en Galería de la Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 12. Guardar Escudo / Sello Activo Institucional
+    if (action === 'guardarEscudo' && postData.escudo) {
+      var escHoja = msb_getHojaSegura(ss, 'Sello_Activo', ['url', 'tipo', 'nombre', 'fechaActualizacion']);
+      var esc = postData.escudo;
+      var urlEsc = String(esc.url || '').substring(0, 48000);
+      var ahoraEsc = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
+      var filaEsc = [urlEsc, esc.tipo || 'institucional', esc.nombre || 'Escudo Oficial', ahoraEsc];
+      if (escHoja.getLastRow() >= 2) {
+        escHoja.getRange(2, 1, 1, filaEsc.length).setValues([filaEsc]);
+      } else {
+        escHoja.appendRow(filaEsc);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Sello institucional guardado en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 13. Guardar / Actualizar Material en Inventario (con las 11 columnas exactas)
+    if (action === 'guardarMaterial' && postData.material) {
+      var invHoja = msb_getHojaSegura(ss, 'Inventario', [
+        'ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible',
+        'Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones'
+      ]);
+      var m = postData.material;
+      var filaMat = msb_buscarFilaPorValor(invHoja, 1, m.ID_material);
+      var filaMatValores = [
+        m.ID_material, m.Nombre_material, m.Categoria || 'Recreativo',
+        m.Cantidad_total || 0, m.Cantidad_disponible || 0, m.Unidad || 'Piezas',
+        m.Ubicacion || 'Bodega de Deportes', m.Condicion || 'Buena',
+        m.Responsable_ID || 'PAR-00001', m.Estado || 'Disponible', m.Observaciones || ''
+      ];
+      if (filaMat > 0) {
+        invHoja.getRange(filaMat, 1, 1, filaMatValores.length).setValues([filaMatValores]);
+      } else {
+        invHoja.appendRow(filaMatValores);
+      }
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Material sincronizado en Inventario' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 14. Sincronizar Inventario Completo
+    if (action === 'guardarInventario' && Array.isArray(postData.inventario)) {
+      var invHoja = msb_getHojaSegura(ss, 'Inventario', [
+        'ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible',
+        'Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones'
+      ]);
+      invHoja.clearContents();
+      invHoja.appendRow([
+        'ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible',
+        'Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones'
+      ]);
+      postData.inventario.forEach(function(m) {
+        invHoja.appendRow([
+          m.ID_material, m.Nombre_material, m.Categoria || 'Recreativo',
+          m.Cantidad_total || 0, m.Cantidad_disponible || 0, m.Unidad || 'Piezas',
+          m.Ubicacion || 'Bodega de Deportes', m.Condicion || 'Buena',
+          m.Responsable_ID || 'PAR-00001', m.Estado || 'Disponible', m.Observaciones || ''
+        ]);
+      });
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Inventario sincronizado globalmente' })).setMimeType(ContentService.MimeType.JSON);
     }
 
     return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
