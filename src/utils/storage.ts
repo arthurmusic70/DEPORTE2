@@ -221,8 +221,191 @@ export function normalizarMaterial(raw: any, index: number = 0): MaterialInventa
 }
 
 /**
- * Normaliza cualquier respuesta de evaluación (de Plataforma, Google Sheets o Google Forms)
- * para que coincida perfectamente con el esquema analítico del Administrador.
+ * Normaliza y alinea cualquier registro de Solicitud F02 proveniente de Google Sheets o LocalStorage,
+ * reparando de forma automática posibles desfasamientos provocados por tablas históricas de 14 columnas vs 19 valores.
+ */
+export function normalizarSolicitud(raw: any, index: number = 0): Solicitud {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      ID_solicitud: `SOL-${String(index + 1).padStart(3, '0')}`,
+      Fecha_solicitud: msb_obtenerFechaHoraLocal(),
+      Solicitante_ID: 'PAR-00001',
+      Solicitante_Nombre: 'Solicitante Institucional',
+      Solicitante_Rol: 'estudiante',
+      Nivel_prioridad: 3,
+      Prioridad_Etiqueta: 'Prioridad 3 (Comunidad)',
+      Tipo_solicitud: 'Material',
+      ID_recurso: 'MAT-001',
+      Recurso_Nombre: 'Material Deportivo',
+      Fecha_uso: msb_obtenerFechaHoraLocal().substring(0, 10),
+      Hora_inicio: '09:00',
+      Hora_fin: '11:00',
+      Cantidad: '1',
+      Proposito: 'Práctica institucional',
+      Estado: 'Pendiente',
+      Revisado_por_ID: '',
+      Fecha_resolucion: '',
+      Motivo_observaciones: ''
+    };
+  }
+
+  const id = raw.ID_solicitud || raw.id_solicitud || raw.ID || `SOL-${String(index + 1).padStart(3, '0')}`;
+  const fechaSol = raw.Fecha_solicitud || raw.fecha_solicitud || msb_obtenerFechaHoraLocal();
+  const solicitanteId = raw.Solicitante_ID || raw.solicitante_id || raw.Solicitante || 'PAR-00001';
+
+  // Detectar desfasamiento de columnas por encabezados antiguos de 14 columnas vs valores de 19 columnas
+  const rawTipo = String(raw.Tipo_solicitud || '').trim();
+  const rawHoraFin = String(raw.Hora_fin || '').trim();
+  const rawFechaUsoHeader = String(raw['Fecha_uso/préstamo'] ?? raw['Fecha_uso/prestamo'] ?? '').trim();
+  
+  // Si Tipo_solicitud no es 'Espacio' | 'Material' | 'Espacio y material', sino el nombre de una persona o rol:
+  const esFilaDesfasada = rawTipo && !['Espacio', 'Material', 'Espacio y material'].includes(rawTipo) && 
+    (['Material', 'Espacio', 'Espacio y material'].includes(rawHoraFin) || ['0', '1', '2', '3'].includes(rawFechaUsoHeader) || ['0', '1', '2', '3'].includes(String(raw.Fecha_uso)));
+
+  let solicitanteNombre = raw.Solicitante_Nombre || raw.solicitante_nombre || '';
+  let solicitanteRol = raw.Solicitante_Rol || raw.solicitante_rol || 'estudiante';
+  let nivelPrioridad: NivelPrioridad = 3;
+  let prioridadEtiqueta: Solicitud['Prioridad_Etiqueta'] = 'Prioridad 3 (Comunidad)';
+  let tipoSol: Solicitud['Tipo_solicitud'] = 'Material';
+  let recursoId = raw.ID_recurso || raw.id_recurso || 'MAT-001';
+  let recursoNombre = raw.Recurso_Nombre || raw.recurso_nombre || '';
+  let fechaUso = raw.Fecha_uso || raw['Fecha_uso/préstamo'] || raw['Fecha_uso/prestamo'] || '';
+  let horaInicio = raw.Hora_inicio || '09:00';
+  let horaFin = raw.Hora_fin || '11:00';
+  let cantidad = String(raw.Cantidad || '1');
+  let proposito = raw.Proposito || raw.Propósito || raw.proposito || '';
+  let estado: Solicitud['Estado'] = 'Pendiente';
+  let revisadoPor = raw.Revisado_por_ID || '';
+  let fechaResolucion = raw.Fecha_resolucion || raw['Fecha_resolución'] || '';
+  let motivoObs = raw.Motivo_observaciones || raw['Motivo/observaciones'] || '';
+
+  if (esFilaDesfasada) {
+    // Reconstruir desde los campos desfasados por la tabla de 14 columnas
+    solicitanteNombre = raw.Tipo_solicitud || solicitanteNombre;
+    solicitanteRol = raw.ID_recurso || solicitanteRol;
+    const pVal = Number(raw['Fecha_uso/préstamo'] ?? raw['Fecha_uso/prestamo'] ?? raw.Fecha_uso ?? 3);
+    nivelPrioridad = (isNaN(pVal) || pVal < 0 || pVal > 3) ? 3 : (pVal as NivelPrioridad);
+    prioridadEtiqueta = (raw.Hora_inicio as any) || (nivelPrioridad === 0 ? 'Prioridad Total (Dirección / Admin)' : nivelPrioridad === 1 ? 'Prioridad 1 (Deportiva)' : nivelPrioridad === 2 ? 'Prioridad 2 (Docente)' : 'Prioridad 3 (Comunidad)');
+    tipoSol = (['Espacio', 'Material', 'Espacio y material'].includes(rawHoraFin) ? rawHoraFin : 'Material') as any;
+    recursoId = raw.Cantidad || recursoId;
+    recursoNombre = raw['Propósito'] || raw.Proposito || recursoNombre || recursoId;
+    fechaUso = raw.Estado && /^\d{4}-\d{2}-\d{2}/.test(String(raw.Estado)) ? String(raw.Estado).substring(0, 10) : fechaUso;
+    horaInicio = raw.Revisado_por_ID && String(raw.Revisado_por_ID).includes(':') ? raw.Revisado_por_ID : horaInicio;
+    horaFin = (raw['Fecha_resolución'] || raw.Fecha_resolucion) && String(raw['Fecha_resolución'] || raw.Fecha_resolucion).includes(':') ? (raw['Fecha_resolución'] || raw.Fecha_resolucion) : horaFin;
+    cantidad = raw['Motivo/observaciones'] || raw.Motivo_observaciones || cantidad;
+    proposito = raw.Proposito || raw['Propósito'] || `Uso de ${recursoNombre}`;
+    estado = (['Pendiente', 'Aprobada', 'Rechazada', 'Concluida'].includes(raw.Estado) ? raw.Estado : 'Pendiente') as any;
+    revisadoPor = '';
+    fechaResolucion = '';
+    motivoObs = raw.Motivo_observaciones || `Registrado con ${prioridadEtiqueta}.`;
+  } else {
+    // Formato canónico
+    if (['Espacio', 'Material', 'Espacio y material'].includes(rawTipo)) {
+      tipoSol = rawTipo as any;
+    }
+    const pNum = Number(raw.Nivel_prioridad ?? 3);
+    nivelPrioridad = (isNaN(pNum) || pNum < 0 || pNum > 3) ? 3 : (pNum as NivelPrioridad);
+    prioridadEtiqueta = raw.Prioridad_Etiqueta || (nivelPrioridad === 0 ? 'Prioridad Total (Dirección / Admin)' : nivelPrioridad === 1 ? 'Prioridad 1 (Deportiva)' : nivelPrioridad === 2 ? 'Prioridad 2 (Docente)' : 'Prioridad 3 (Comunidad)');
+    
+    // Normalizar formato de fecha si viene ISO
+    if (fechaUso.includes('T')) {
+      fechaUso = fechaUso.split('T')[0];
+    }
+    const rawEstado = String(raw.Estado || '').trim();
+    if (['Pendiente', 'Aprobada', 'Rechazada', 'Concluida'].includes(rawEstado)) {
+      estado = rawEstado as any;
+    }
+  }
+
+  // Normalizar nombres si faltan
+  if (!solicitanteNombre && solicitanteId) {
+    const identidades = getStored<any[]>('IDENTIDADES_V2', []);
+    const userFound = identidades.find(u => u.id === solicitanteId || u.username === solicitanteId);
+    if (userFound) {
+      solicitanteNombre = `${userFound.nombre} ${userFound.apellidos}`.trim();
+      solicitanteRol = userFound.rol || solicitanteRol;
+    }
+  }
+
+  return {
+    ID_solicitud: String(id).trim(),
+    Fecha_solicitud: String(fechaSol).trim(),
+    Solicitante_ID: String(solicitanteId).trim(),
+    Solicitante_Nombre: String(solicitanteNombre || solicitanteId).trim(),
+    Solicitante_Rol: solicitanteRol as any,
+    Nivel_prioridad: nivelPrioridad,
+    Prioridad_Etiqueta: prioridadEtiqueta,
+    Tipo_solicitud: tipoSol,
+    ID_recurso: String(recursoId).trim(),
+    Recurso_Nombre: String(recursoNombre || recursoId).trim(),
+    Fecha_uso: String(fechaUso).trim() || msb_obtenerFechaHoraLocal().substring(0, 10),
+    Hora_inicio: String(horaInicio).trim(),
+    Hora_fin: String(horaFin).trim(),
+    Cantidad: String(cantidad).trim(),
+    Proposito: String(proposito).trim(),
+    Estado: estado,
+    Revisado_por_ID: String(revisadoPor).trim(),
+    Fecha_resolucion: String(fechaResolucion).trim(),
+    Motivo_observaciones: String(motivoObs).trim()
+  };
+}
+
+/**
+ * Comprime data URLs base64 de imágenes o firmas a dimensiones y calidad optimizadas
+ * para garantizar que nunca excedan el límite de 50,000 caracteres por celda de Google Sheets.
+ */
+export async function comprimirImagenBase64(dataUrl: string, maxDim: number = 480, quality: number = 0.7): Promise<string> {
+  if (!dataUrl || typeof dataUrl !== 'string') return '';
+  if (!dataUrl.startsWith('data:image')) return dataUrl.substring(0, 48000);
+  if (dataUrl.startsWith('data:image/svg+xml')) return dataUrl.substring(0, 48000);
+
+  if (typeof window === 'undefined') return dataUrl.substring(0, 48000);
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl.substring(0, 48000));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          const compressed = canvas.toDataURL('image/jpeg', quality);
+          if (compressed.length < dataUrl.length || compressed.length < 48000) {
+            resolve(compressed);
+            return;
+          }
+        } catch {}
+        resolve(dataUrl.substring(0, 48000));
+      };
+      img.onerror = () => resolve(dataUrl.substring(0, 48000));
+      img.src = dataUrl;
+    } catch {
+      resolve(dataUrl.substring(0, 48000));
+    }
+  });
+}
+
+/**
+ * Normaliza cualquier respuesta de evaluación (de Plataforma, Google Sheets o los 3 Google Forms oficiales)
+ * empatando 1:1 cada pregunta y columna con los encabezados oficiales.
  */
 export function normalizarEvaluacion(raw: any, index: number = 0): import('../types').RespuestaEncuesta {
   if (!raw || typeof raw !== 'object') {
@@ -238,16 +421,30 @@ export function normalizarEvaluacion(raw: any, index: number = 0): import('../ty
 
   const idRespuesta = raw.idRespuesta || raw.id || raw.ID || `ENC-${String(index + 1).padStart(3, '0')}`;
   
-  // Determinar tipoEncuesta si no viene explícito
+  // 1. Identificar si proviene de alguno de los 3 Google Forms oficiales por sus encabezados exactos:
   let tipoEncuesta: import('../types').TipoEncuesta = raw.tipoEncuesta || raw.tipo || 'satisfaccion_servicios';
-  if (!raw.tipoEncuesta) {
-    if (raw.encargadoClubId || raw.p3_desempenoEncargado || raw.dominioTecnico || /encargado/i.test(raw.tituloEncuesta || '') || /desempeno/i.test(raw.tituloEncuesta || '')) {
-      tipoEncuesta = 'evaluacion_encargados';
-    } else if (raw.nivelEnergia || raw.reduccionEstres || /bienestar/i.test(raw.tituloEncuesta || '')) {
-      tipoEncuesta = 'bienestar_salud';
-    } else {
-      tipoEncuesta = 'satisfaccion_servicios';
-    }
+  
+  // Header checks para Form 1 (Evaluación de Encargados)
+  const esFormEncargados = raw['Preparación del experto (tallerista, conferencista, seminarista, coordinador de actividades).'] !== undefined ||
+    raw['Club al que pertenece'] !== undefined ||
+    raw['Comunicación con los participantes'] !== undefined ||
+    raw.preparacionExperto !== undefined ||
+    raw.dominioTecnico !== undefined;
+
+  // Header checks para Form 3 (Bienestar y Salud)
+  const esFormBienestar = raw['Mantenimiento de Vida Activa: Realizo actividad física o deporte de forma regular como parte de mi rutina diaria/semanal.'] !== undefined ||
+    raw['Hábitos de Descanso y Energía: Considero que mis hábitos de descanso y sueño me permiten mantener suficiente energía durante mis jornadas escolares/laborales.'] !== undefined ||
+    raw.vidaActiva !== undefined ||
+    raw.nivelEnergia !== undefined;
+
+  if (raw.tipoEncuesta) {
+    tipoEncuesta = raw.tipoEncuesta;
+  } else if (esFormEncargados) {
+    tipoEncuesta = 'evaluacion_encargados';
+  } else if (esFormBienestar) {
+    tipoEncuesta = 'bienestar_salud';
+  } else {
+    tipoEncuesta = 'satisfaccion_servicios';
   }
 
   const tituloEncuesta = raw.tituloEncuesta || (
@@ -263,25 +460,87 @@ export function normalizarEvaluacion(raw: any, index: number = 0): import('../ty
     try {
       respuestas = JSON.parse(raw.respuestas_json);
     } catch {}
-  } else {
-    // Si viene de columnas planas (Google Forms o formato previo):
-    const campos = [
-      'p1_satisfaccionGeneral', 'p2_calidadInstalaciones', 'p3_desempenoEncargado', 'p4_cumplimientoHorarios', 
-      'p5_ambienteConvivencia', 'p6_beneficioSalud', 'p7_recomendariaActividad', 'puntualidad', 'dominioTecnico', 
-      'respetoYTrato', 'fomentoSalud', 'claridadInstrucciones', 'atencionPersonal', 'estadoMateriales', 
-      'limpiezaEspacios', 'tiempoRespuesta', 'utilidadPausasActivas', 'nivelEnergia', 'reduccionEstres', 
-      'habitoSaludable', 'impactoAcademico', 'sentidoComunidad'
-    ];
-    campos.forEach(k => {
-      if (raw[k] !== undefined && raw[k] !== '') {
-        const val = Number(raw[k]);
-        respuestas[k] = isNaN(val) ? raw[k] : val;
+  }
+
+  // Mapear campos de Google Forms 1: Evaluación de encargados
+  if (tipoEncuesta === 'evaluacion_encargados') {
+    if (raw['Preparación del experto (tallerista, conferencista, seminarista, coordinador de actividades).'] !== undefined) {
+      respuestas.preparacionExperto = Number(raw['Preparación del experto (tallerista, conferencista, seminarista, coordinador de actividades).']) || 5;
+    }
+    if (raw['Comunicación con los participantes'] !== undefined) {
+      respuestas.comunicacion = Number(raw['Comunicación con los participantes']) || 5;
+    }
+    if (raw['Estrategias y/o actividades de trabajo'] !== undefined) {
+      respuestas.estrategias = Number(raw['Estrategias y/o actividades de trabajo']) || 5;
+    }
+    if (raw['Uso de recursos y materiales'] !== undefined) {
+      respuestas.recursos = Number(raw['Uso de recursos y materiales']) || 5;
+    }
+    if (raw['Cumplimiento del objetivo'] !== undefined) {
+      respuestas.cumplimientoObjetivo = Number(raw['Cumplimiento del objetivo']) || 5;
+    }
+  }
+
+  // Mapear campos de Google Forms 2: Satisfacción de servicios
+  if (tipoEncuesta === 'satisfaccion_servicios') {
+    const mapaSatisfaccion: Record<string, string> = {
+      'La oferta de actividades deportivas, acondicionamiento y programas de salud es variada y responde a las necesidades de la comunidad.': 'ofertaVariada',
+      'Los programas de evaluación física, nutrición y cuidado médico-deportivo están bien organizados y son de fácil acceso.': 'programasSaludOrganizados',
+      'El Departamento difunde con oportunidad los calendarios, horarios y convocatorias de torneos y actividades.': 'difusionOportuna',
+      'La capacidad de cupos y horarios ofertados es suficiente para atender la demanda de los usuarios.': 'capacidadCuposSuficiente',
+      'El Departamento mantiene las instalaciones (gimnasio, cancha polivalente, sanitarios) en óptimas condiciones de limpieza e higiene.': 'mantenimientoLimpieza',
+      'Existe un programa efectivo de mantenimiento preventivo y reemplazo oportuno de equipos y materiales deportivos deteriorados.': 'mantenimientoPreventivo',
+      'Las áreas deportivas cuentan con iluminación, ventilación y señalización de seguridad adecuadas para la práctica.': 'iluminacionVentilacion',
+      'Los espacios deportivos y sus accesos cuentan con adaptaciones para personas con movilidad reducida u otras necesidades especiales.': 'accesibilidadInclusiva',
+      'El personal del Departamento brinda una atención amable, eficiente y respetuosa.': 'atencionPersonal',
+      'Los trámites departamentales (inscripciones, préstamo de material, permisos) son ágiles y sencillos.': 'tramitesAgiles',
+      'La información sobre reglamentos y requisitos de servicio es clara, transparente y accesible.': 'informacionClara',
+      'Los canales de comunicación institucional (redes, cartelera, avisos digitales) mantienen informada a la comunidad con precisión.': 'canalesComunicacion',
+      'Las inconformidades o fallas reportadas a la administración departamental reciben una respuesta y solución oportuna.': 'resolucionInconformidades',
+      'El Departamento de Deporte y Salud promueve de forma activa hábitos de vida saludable y bienestar psicosocial.': 'promocionSaludBienestar',
+      'En general, estoy satisfecho con la gestión integral y los servicios prestados por el Departamento de Deporte y Salud.': 'satisfaccionGeneral'
+    };
+
+    Object.entries(mapaSatisfaccion).forEach(([header, key]) => {
+      if (raw[header] !== undefined && raw[header] !== '') {
+        const val = Number(raw[header]);
+        respuestas[key] = isNaN(val) ? 5 : val;
+      }
+    });
+
+    if (raw['¿Qué fortalezas o aspectos positivos destaca de la gestión del Departamento de Deporte y Salud?'] !== undefined) {
+      respuestas.fortalezas = String(raw['¿Qué fortalezas o aspectos positivos destaca de la gestión del Departamento de Deporte y Salud?']).trim();
+    }
+    if (raw['¿Qué sugerencias concretas propone para mejorar los servicios, infraestructura o programas departamentales?.'] !== undefined) {
+      respuestas.sugerencias = String(raw['¿Qué sugerencias concretas propone para mejorar los servicios, infraestructura o programas departamentales?.']).trim();
+    }
+  }
+
+  // Mapear campos de Google Forms 3: Bienestar y Salud
+  if (tipoEncuesta === 'bienestar_salud') {
+    const mapaBienestar: Record<string, string> = {
+      'Mantenimiento de Vida Activa: Realizo actividad física o deporte de forma regular como parte de mi rutina diaria/semanal.': 'vidaActiva',
+      'Hábitos de Descanso y Energía: Considero que mis hábitos de descanso y sueño me permiten mantener suficiente energía durante mis jornadas escolares/laborales.': 'descansoEnergia',
+      'Alimentación e Hidratación: Tengo acceso a opciones de alimentación e hidratación saludables dentro o alrededor de la institución.': 'alimentacionHidratacion',
+      'Control del Estrés y Agotamiento: Cuento con herramientas y apoyo para gestionar el estrés derivado de las exigencias académicas o laborales.': 'controlEstres',
+      'Vitalidad y Balance Personal: Mantengo un equilibrio adecuado entre mis responsabilidades educativas/laborales y mi bienestar personal.': 'vitalidadBalance',
+      'Estado de Ánimo y Florecimiento: En general, me siento motivado, con ánimo positivo y con un claro sentido de desarrollo personal en la institución.': 'estadoAnimo',
+      'Sentido de Pertenencia: Me siento integrado y respaldado por la comunidad universitaria en las actividades deportivas y de salud.': 'sentidoPertenencia',
+      'Convivencia Pacífica y Respeto: El ambiente en los espacios deportivos y de acondicionamiento es de respeto, juego limpio y libre de violencia/acoso.': 'convivenciaRespeto',
+      'Satisfacción Departamental: En general, estoy satisfecho con la contribución del Departamento de Deporte y Salud a mi calidad de vida universitaria.': 'satisfaccionDepartamental',
+      'Recomendación Institucional: Recomendaría a otros compañeros participar en los programas de salud, cultura física y acondicionamiento de la institución': 'recomendacionInstitucional'
+    };
+
+    Object.entries(mapaBienestar).forEach(([header, key]) => {
+      if (raw[header] !== undefined && raw[header] !== '') {
+        const val = Number(raw[header]);
+        respuestas[key] = isNaN(val) ? 5 : val;
       }
     });
   }
 
-  // Calcular puntuacionPromedio si falta
-  let puntuacionPromedio = Number(raw.puntuacionPromedio || raw.promedio || 0);
+  // Calcular puntuación promedio
+  let puntuacionPromedio = Number(raw.Puntuación ?? raw.puntuacionPromedio ?? raw.promedio ?? 0);
   if (!puntuacionPromedio || isNaN(puntuacionPromedio)) {
     const numValues = Object.values(respuestas).map(Number).filter(n => !isNaN(n) && n > 0 && n <= 5);
     if (numValues.length > 0) {
@@ -291,7 +550,11 @@ export function normalizarEvaluacion(raw: any, index: number = 0): import('../ty
     }
   }
 
-  const fecha = raw.fechaRegistro || raw.fechaEvaluacion || raw.fecha || msb_obtenerFechaHoraLocal();
+  // Actividad / Club vinculado
+  const clubNombre = raw['Club al que pertenece'] || raw.nombreActividad || raw.actividad || (raw.idActividad === 'GENERAL' ? 'Departamento de Deporte y Salud' : 'Club Deportivo');
+  const sector = raw['TIPO DE USUARIO'] || raw.sector || 'Comunidad Normalista';
+  const fecha = raw['Marca temporal'] || raw.fechaRegistro || raw.fecha || msb_obtenerFechaHoraLocal();
+  const comentarios = raw['Sugerencias para la mejora.'] || raw['¿Qué sugerencias concretas propone para mejorar los servicios, infraestructura o programas departamentales?.'] || raw.comentarios || raw.Comentarios || respuestas.sugerencias || '';
 
   return {
     idRespuesta: String(idRespuesta).trim(),
@@ -299,14 +562,14 @@ export function normalizarEvaluacion(raw: any, index: number = 0): import('../ty
     tituloEncuesta,
     idUsuario: 'ANONIMO',
     nombreUsuario: 'Participante Anónimo',
-    correoUsuario: undefined,
-    sector: raw.sector || 'Comunidad Normalista',
+    correoUsuario: raw['Correo '] || raw.Correo || raw.correoUsuario || undefined,
+    sector: sector as any,
     idActividad: raw.idActividad || 'GENERAL',
-    nombreActividad: raw.nombreActividad || (raw.idActividad === 'GENERAL' ? 'Departamento de Deporte y Salud' : 'Club Deportivo'),
+    nombreActividad: String(clubNombre).trim(),
     fechaRegistro: String(fecha).trim(),
     respuestas,
     puntuacionPromedio,
-    comentarios: raw.comentarios || raw.Comentarios || ''
+    comentarios: String(comentarios).trim()
   };
 }
 
@@ -1252,7 +1515,8 @@ export class MSBDatabase {
   }
 
   static getSolicitudes(): Solicitud[] {
-    const list = getStored<Solicitud[]>('SOLICITUDES_V2', SEED_SOLICITUDES);
+    const rawList = getStored<any[]>('SOLICITUDES_V2', SEED_SOLICITUDES);
+    const list = rawList.map((s, idx) => normalizarSolicitud(s, idx));
     // Sort automatically by priority (0 first, then 1, 2, 3) and then by date desc
     return list.sort((a, b) => {
       if (a.Nivel_prioridad !== b.Nivel_prioridad) {
@@ -1263,7 +1527,11 @@ export class MSBDatabase {
   }
 
   static saveSolicitudes(data: Solicitud[]) {
-    setStored('SOLICITUDES_V2', data);
+    const norm = data.map((s, idx) => normalizarSolicitud(s, idx));
+    setStored('SOLICITUDES_V2', norm);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('msb_datos_actualizados'));
+    }
   }
 
   static getInscripciones(): InscripcionAsistencia[] {
@@ -3302,7 +3570,18 @@ function doGet(e) {
     var actHoja = msb_getHojaSegura(ss, 'Actividades', ['ID_actividad','Nombre','Descripción','Tipo','Cupo']);
     var espHoja = msb_getHojaSegura(ss, 'Espacios', ['ID_espacio','Nombre','Ubicación','Capacidad']);
     var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible','Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones']);
-    var solHoja = msb_getHojaSegura(ss, 'Solicitudes', ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones']);
+    
+    // Encabezados canónicos completos para Solicitudes F02 (19 columnas oficiales)
+    var solHeadersOficiales = ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones'];
+    var solHoja = msb_getHojaSegura(ss, 'Solicitudes', solHeadersOficiales);
+    
+    // Auto-reparar encabezados de Solicitudes si la hoja tiene la estructura antigua de 14 columnas
+    var solHeadersActuales = msb_getHeaders(solHoja);
+    if (solHeadersActuales.length < 19 || solHeadersActuales.indexOf('Solicitante_Nombre') === -1) {
+      solHoja.getRange(1, 1, 1, solHeadersOficiales.length).setValues([solHeadersOficiales]);
+      solHeadersActuales = solHeadersOficiales;
+    }
+
     var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
     var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
     var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
@@ -3316,16 +3595,37 @@ function doGet(e) {
     var cfgList = msb_getAllObjects(cfgHoja, msb_getHeaders(cfgHoja));
     var escList = msb_getAllObjects(escHoja, msb_getHeaders(escHoja));
 
+    // Recopilar evaluaciones tanto de la hoja unificada 'Evaluaciones' como de las hojas de Google Forms vinculadas
+    var todasLasEvaluaciones = msb_getAllObjects(evHoja, msb_getHeaders(evHoja));
+
+    // Buscar hojas individuales de Google Forms en el libro
+    var hojasPosiblesForms = [
+      'Evaluacion_Encargados', 'Respuestas de formulario 1', 'Evaluación de encargados deportivos',
+      'Satisfaccion_Servicios', 'Respuestas de formulario 2', 'Formulario de satisfacción',
+      'Bienestar_Salud', 'Respuestas de formulario 3', 'Formulario bienestar'
+    ];
+
+    hojasPosiblesForms.forEach(function(nomH) {
+      var h = ss.getSheetByName(nomH);
+      if (h && h.getLastRow() > 1) {
+        var hHeaders = msb_getHeaders(h);
+        var hRows = msb_getAllObjects(h, hHeaders);
+        hRows.forEach(function(r) {
+          todasLasEvaluaciones.push(r);
+        });
+      }
+    });
+
     return ContentService.createTextOutput(JSON.stringify({
       ok: true,
       actividades: msb_getAllObjects(actHoja, msb_getHeaders(actHoja)),
       espacios: msb_getAllObjects(espHoja, msb_getHeaders(espHoja)),
       inventario: msb_getAllObjects(invHoja, msb_getHeaders(invHoja)),
-      solicitudes: msb_getAllObjects(solHoja, msb_getHeaders(solHoja)),
+      solicitudes: msb_getAllObjects(solHoja, solHeadersActuales),
       inscripciones: msb_getAllObjects(insHoja, msb_getHeaders(insHoja)),
       galeria: msb_getAllObjects(galHoja, msb_getHeaders(galHoja)),
       identidades: msb_getAllObjects(idHoja, msb_getHeaders(idHoja)),
-      evaluaciones: msb_getAllObjects(evHoja, msb_getHeaders(evHoja)),
+      evaluaciones: todasLasEvaluaciones,
       pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja)),
       autoridades: autList.length ? autList[0] : null,
       configEvaluaciones: cfgList.length ? cfgList[0] : null,
@@ -3343,17 +3643,53 @@ function doPost(e) {
     var postData = JSON.parse(e.postData.contents);
     var action = postData.action;
 
-    // 1. Guardar Solicitud F02 (con prevención de duplicados)
+    // 1. Guardar Solicitud F02 (con prevención de duplicados y alineación precisa de 19 columnas)
     if (action === 'guardarSolicitud' && postData.solicitud) {
-      var solHoja = msb_getHojaSegura(ss, 'Solicitudes', ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones']);
+      var solHeadersOficiales = ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones'];
+      var solHoja = msb_getHojaSegura(ss, 'Solicitudes', solHeadersOficiales);
+      
+      var headers = msb_getHeaders(solHoja);
+      if (headers.length < 19 || headers.indexOf('Solicitante_Nombre') === -1) {
+        solHoja.getRange(1, 1, 1, solHeadersOficiales.length).setValues([solHeadersOficiales]);
+        headers = solHeadersOficiales;
+      }
+
       var s = postData.solicitud;
       var filaSol = msb_buscarFilaPorValor(solHoja, 1, s.ID_solicitud);
-      var filaSolValores = [
-        s.ID_solicitud, s.Fecha_solicitud, s.Solicitante_ID, s.Solicitante_Nombre,
-        s.Solicitante_Rol, s.Nivel_prioridad, s.Prioridad_Etiqueta, s.Tipo_solicitud,
-        s.ID_recurso, s.Recurso_Nombre, s.Fecha_uso, s.Hora_inicio, s.Hora_fin,
-        s.Cantidad, s.Proposito, s.Estado, s.Revisado_por_ID || '', s.Fecha_resolucion || '', s.Motivo_observaciones || ''
-      ];
+      
+      // Mapear cada valor a su columna exacta por nombre de encabezado
+      var dictValores = {
+        'ID_solicitud': s.ID_solicitud || '',
+        'Fecha_solicitud': s.Fecha_solicitud || '',
+        'Solicitante_ID': s.Solicitante_ID || '',
+        'Solicitante_Nombre': s.Solicitante_Nombre || '',
+        'Solicitante_Rol': s.Solicitante_Rol || '',
+        'Nivel_prioridad': s.Nivel_prioridad !== undefined ? s.Nivel_prioridad : 3,
+        'Prioridad_Etiqueta': s.Prioridad_Etiqueta || '',
+        'Tipo_solicitud': s.Tipo_solicitud || '',
+        'ID_recurso': s.ID_recurso || '',
+        'Recurso_Nombre': s.Recurso_Nombre || '',
+        'Fecha_uso': s.Fecha_uso || '',
+        'Fecha_uso/préstamo': s.Fecha_uso || '',
+        'Hora_inicio': s.Hora_inicio || '',
+        'Hora_fin': s.Hora_fin || '',
+        'Cantidad': s.Cantidad || '1',
+        'Proposito': s.Proposito || '',
+        'Propósito': s.Proposito || '',
+        'Estado': s.Estado || 'Pendiente',
+        'Revisado_por_ID': s.Revisado_por_ID || '',
+        'Fecha_resolucion': s.Fecha_resolucion || '',
+        'Fecha_resolución': s.Fecha_resolucion || '',
+        'Motivo_observaciones': s.Motivo_observaciones || '',
+        'Motivo/observaciones': s.Motivo_observaciones || ''
+      };
+
+      var filaSolValores = [];
+      for (var colIdx = 0; colIdx < headers.length; colIdx++) {
+        var hName = String(headers[colIdx]).trim();
+        filaSolValores.push(dictValores[hName] !== undefined ? dictValores[hName] : '');
+      }
+
       if (filaSol > 0) {
         solHoja.getRange(filaSol, 1, 1, filaSolValores.length).setValues([filaSolValores]);
       } else {
@@ -3365,12 +3701,18 @@ function doPost(e) {
     // 2. Dictaminar y Actualizar Estado de Solicitud F02 (Aprobar / Rechazar)
     if (action === 'actualizarSolicitud' && postData.idSolicitud) {
       var solHoja = msb_getHojaSegura(ss, 'Solicitudes');
+      var headers = msb_getHeaders(solHoja);
       var filaSol = msb_buscarFilaPorValor(solHoja, 1, postData.idSolicitud);
       if (filaSol > 0) {
-        solHoja.getRange(filaSol, 16).setValue(postData.estado);
-        solHoja.getRange(filaSol, 17).setValue(postData.reviewerId || '');
-        solHoja.getRange(filaSol, 18).setValue(postData.fechaResolucion || '');
-        solHoja.getRange(filaSol, 19).setValue(postData.motivo || '');
+        var colEstado = headers.indexOf('Estado') + 1 || 16;
+        var colReviewer = headers.indexOf('Revisado_por_ID') + 1 || 17;
+        var colFechaRes = headers.indexOf('Fecha_resolucion') + 1 || (headers.indexOf('Fecha_resolución') + 1) || 18;
+        var colMotivo = headers.indexOf('Motivo_observaciones') + 1 || (headers.indexOf('Motivo/observaciones') + 1) || 19;
+
+        solHoja.getRange(filaSol, colEstado).setValue(postData.estado);
+        if (colReviewer > 0) solHoja.getRange(filaSol, colReviewer).setValue(postData.reviewerId || '');
+        if (colFechaRes > 0) solHoja.getRange(filaSol, colFechaRes).setValue(postData.fechaResolucion || '');
+        if (colMotivo > 0) solHoja.getRange(filaSol, colMotivo).setValue(postData.motivo || '');
       }
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Solicitud dictaminada y actualizada' })).setMimeType(ContentService.MimeType.JSON);
     }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ImagenActividad, Actividad } from '../../types';
-import { MSBDatabase, CONFIG } from '../../utils/storage';
+import { MSBDatabase, CONFIG, comprimirImagenBase64 } from '../../utils/storage';
 import { SelloInstitucional } from '../SelloInstitucional';
 import { 
   Camera, 
@@ -132,8 +132,9 @@ export const AdminGaleriaView: React.FC = () => {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    reader.onload = async (event) => {
+      const rawDataUrl = event.target?.result as string;
+      const dataUrl = await comprimirImagenBase64(rawDataUrl, 480, 0.75);
       setPreviewEscudoSubido(dataUrl);
       setUrlEscudo(dataUrl);
       setTipoEscudoSeleccionado('personalizado');
@@ -220,8 +221,9 @@ export const AdminGaleriaView: React.FC = () => {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    reader.onload = async (event) => {
+      const rawDataUrl = event.target?.result as string;
+      const dataUrl = await comprimirImagenBase64(rawDataUrl, 640, 0.75);
       setArchivoPreview(dataUrl);
       setUrlImagen(dataUrl);
       setMensaje(null);

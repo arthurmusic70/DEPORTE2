@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { AutoridadesConfig } from '../types';
-import { MSBDatabase, FIRMA_DEMO_SANDRA, FIRMA_DEMO_ARTURO } from '../utils/storage';
+import { MSBDatabase, FIRMA_DEMO_SANDRA, FIRMA_DEMO_ARTURO, comprimirImagenBase64 } from '../utils/storage';
 import { PenTool, CheckCircle2, RotateCcw, Sparkles, X, Check } from 'lucide-react';
 
 interface SignatureModalProps {
@@ -190,19 +190,21 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     img.src = demo;
   };
 
-  const handleGuardarFirmaActual = () => {
+  const handleGuardarFirmaActual = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dataUrl = canvas.toDataURL('image/png');
+    const rawDataUrl = canvas.toDataURL('image/png');
+    // Comprimir firma para que nunca exceda los límites de celda de Google Sheets
+    const dataUrl = await comprimirImagenBase64(rawDataUrl, 400, 0.75);
 
     const updated: AutoridadesConfig = {
       ...autoridades,
       [autoridadActiva === 'matutino' ? 'jefeMatutinoFirma' : 'jefeVespertinoFirma']: dataUrl
     };
 
-    MSBDatabase.saveAutoridades(updated);
+    await MSBDatabase.saveAutoridades(updated);
     setAutoridades(updated);
-    setMensajeExito(`✓ Firma virtual de ${autoridadActiva === 'matutino' ? autoridades.jefeMatutinoNombre : autoridades.jefeVespertinoNombre} guardada exitosamente.`);
+    setMensajeExito(`✓ Firma virtual de ${autoridadActiva === 'matutino' ? autoridades.jefeMatutinoNombre : autoridades.jefeVespertinoNombre} guardada y respaldada en la Base Maestra.`);
 
     setTimeout(() => {
       setMensajeExito(null);
