@@ -65,7 +65,7 @@ export const SolicitudesView: React.FC<SolicitudesViewProps> = ({ usuario }) => 
     usuario.rol === 'administrador' ? perfilAdminSolicitante : undefined
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setMensajeExito(null);
@@ -100,7 +100,7 @@ export const SolicitudesView: React.FC<SolicitudesViewProps> = ({ usuario }) => 
 
     setEnviando(true);
     try {
-      const res = MSBDatabase.submitSolicitud({
+      const res = await MSBDatabase.submitSolicitud({
         solicitanteID: usuario.id,
         solicitanteNombre: `${usuario.nombre} ${usuario.apellidos}`,
         solicitanteRol: usuario.rol,

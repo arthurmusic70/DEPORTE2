@@ -68,7 +68,7 @@ export const ActividadesView: React.FC<ActividadesViewProps> = ({ usuario, onAct
     setErrorF01(null);
   };
 
-  const enviarFormularioF01 = (e: React.FormEvent) => {
+  const enviarFormularioF01 = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!actividadSeleccionada) return;
 
@@ -76,7 +76,7 @@ export const ActividadesView: React.FC<ActividadesViewProps> = ({ usuario, onAct
     setErrorF01(null);
 
     try {
-      const res = MSBDatabase.registerActivity(
+      const res = await MSBDatabase.registerActivity(
         usuario.id,
         actividadSeleccionada.ID_actividad,
         tipoParticipacion,
