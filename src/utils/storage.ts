@@ -3084,7 +3084,14 @@ export class MSBDatabase {
       }
       return { ok: false, mensaje: data?.mensaje || 'Respuesta inválida del servidor.' };
     } catch (err: any) {
-      return { ok: false, mensaje: `Error al sincronizar: ${err.message}` };
+      const msg = err.message || '';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        return { 
+          ok: false, 
+          mensaje: 'Error al sincronizar (Failed to fetch): Google Apps Script no permitió el acceso CORS. Para solucionarlo, en Apps Script ve a Implementar > Administrar implementaciones > Editar > y asegúrate de que "Quién tiene acceso" (Who has access) esté configurado en "Cualquier usuario" (Anyone), luego crea una "Nueva versión" y haz clic en Implementar.' 
+        };
+      }
+      return { ok: false, mensaje: `Error al sincronizar: ${msg}` };
     }
   }
 
@@ -3504,6 +3511,18 @@ export function generarCodigoAppsScriptCompleto(): string {
 // Master Spreadsheet ID: ${CONFIG.MASTER_SPREADSHEET_ID}
 // ============================================================
 
+function msb_getSpreadsheet() {
+  try {
+    var active = SpreadsheetApp.getActiveSpreadsheet();
+    if (active) return active;
+  } catch (err) {}
+  try {
+    return SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
+  } catch (err2) {
+    throw new Error('No se pudo acceder a la hoja: ' + err2.toString());
+  }
+}
+
 function msb_getHojaSegura(ss, nombreHoja, encabezadosPorDefecto) {
   var hoja = ss.getSheetByName(nombreHoja);
   if (!hoja) {
@@ -3529,11 +3548,13 @@ function msb_buscarFilaPorValor(hoja, colIndex, valor) {
 }
 
 function msb_getHeaders(hoja) {
+  if (!hoja) return [];
   var data = hoja.getDataRange().getValues();
   return data.length > 0 ? data[0] : [];
 }
 
 function msb_getAllObjects(hoja, headers) {
+  if (!hoja) return [];
   var data = hoja.getDataRange().getValues();
   if (data.length <= 1) return [];
   var result = [];
@@ -3549,92 +3570,104 @@ function msb_getAllObjects(hoja, headers) {
 }
 
 function doGet(e) {
-  var ss = SpreadsheetApp.openById('${CONFIG.MASTER_SPREADSHEET_ID}');
-  var action = (e && e.parameter) ? e.parameter.action : '';
+  try {
+    var action = (e && e.parameter) ? e.parameter.action : '';
 
-  if (e && e.parameter && e.parameter.data) {
-    try {
-      return doPost({ postData: { contents: e.parameter.data } });
-    } catch (err) {}
-  }
-
-  if (action === 'ping') {
-    return ContentService.createTextOutput(JSON.stringify({ 
-      ok: true, 
-      mensaje: 'Conectado a ${CONFIG.DENOMINACION_BASE_MAESTRA}',
-      spreadsheetId: '${CONFIG.MASTER_SPREADSHEET_ID}'
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  if (action === 'obtenerTodo') {
-    var actHoja = msb_getHojaSegura(ss, 'Actividades', ['ID_actividad','Nombre','Descripción','Tipo','Cupo']);
-    var espHoja = msb_getHojaSegura(ss, 'Espacios', ['ID_espacio','Nombre','Ubicación','Capacidad']);
-    var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible','Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones']);
-    
-    // Encabezados canónicos completos para Solicitudes F02 (19 columnas oficiales)
-    var solHeadersOficiales = ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones'];
-    var solHoja = msb_getHojaSegura(ss, 'Solicitudes', solHeadersOficiales);
-    
-    // Auto-reparar encabezados de Solicitudes si la hoja tiene la estructura antigua de 14 columnas
-    var solHeadersActuales = msb_getHeaders(solHoja);
-    if (solHeadersActuales.length < 19 || solHeadersActuales.indexOf('Solicitante_Nombre') === -1) {
-      solHoja.getRange(1, 1, 1, solHeadersOficiales.length).setValues([solHeadersOficiales]);
-      solHeadersActuales = solHeadersOficiales;
+    if (e && e.parameter && e.parameter.data) {
+      try {
+        return doPost({ postData: { contents: e.parameter.data } });
+      } catch (errPost) {}
     }
 
-    var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
-    var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
-    var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
-    var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','tipoEncuesta','tituloEncuesta','idActividad','nombreActividad','sector','puntuacionPromedio','respuestas_json','comentarios','fechaRegistro','idUsuario','nombreUsuario']);
-    var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas', ['idEvaluacion','idParticipante','nombreParticipante','fechaRegistro','puntuacionGeneral','categoriaRendimiento','inicial_json','final_json']);
-    var autHoja = msb_getHojaSegura(ss, 'Autoridades', ['tituloJefatura','jefeMatutinoNombre','jefeMatutinoCargo','jefeMatutinoFirma','jefeVespertinoNombre','jefeVespertinoCargo','jefeVespertinoFirma','ultimaActualizacion']);
-    var cfgHoja = msb_getHojaSegura(ss, 'Config_Evaluaciones', ['habilitada','fechaHabilitacion','urlFormEvaluacionEncargados','urlFormSatisfaccionServicios','urlFormPercepcionBienestar','mensajeAccesoRestringido','ultimaActualizacion']);
-    var escHoja = msb_getHojaSegura(ss, 'Sello_Activo', ['url','tipo','nombre','fechaActualizacion']);
+    if (action === 'ping') {
+      return ContentService.createTextOutput(JSON.stringify({ 
+        ok: true, 
+        mensaje: 'Conectado a ${CONFIG.DENOMINACION_BASE_MAESTRA}',
+        spreadsheetId: '${CONFIG.MASTER_SPREADSHEET_ID}',
+        timestamp: new Date().toISOString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
 
-    var autList = msb_getAllObjects(autHoja, msb_getHeaders(autHoja));
-    var cfgList = msb_getAllObjects(cfgHoja, msb_getHeaders(cfgHoja));
-    var escList = msb_getAllObjects(escHoja, msb_getHeaders(escHoja));
+    var ss = msb_getSpreadsheet();
 
-    // Recopilar evaluaciones tanto de la hoja unificada 'Evaluaciones' como de las hojas de Google Forms vinculadas
-    var todasLasEvaluaciones = msb_getAllObjects(evHoja, msb_getHeaders(evHoja));
-
-    // Buscar hojas individuales de Google Forms en el libro
-    var hojasPosiblesForms = [
-      'Evaluacion_Encargados', 'Respuestas de formulario 1', 'Evaluación de encargados deportivos',
-      'Satisfaccion_Servicios', 'Respuestas de formulario 2', 'Formulario de satisfacción',
-      'Bienestar_Salud', 'Respuestas de formulario 3', 'Formulario bienestar'
-    ];
-
-    hojasPosiblesForms.forEach(function(nomH) {
-      var h = ss.getSheetByName(nomH);
-      if (h && h.getLastRow() > 1) {
-        var hHeaders = msb_getHeaders(h);
-        var hRows = msb_getAllObjects(h, hHeaders);
-        hRows.forEach(function(r) {
-          todasLasEvaluaciones.push(r);
-        });
+    if (action === 'obtenerTodo') {
+      var actHoja = msb_getHojaSegura(ss, 'Actividades', ['ID_actividad','Nombre','Descripción','Tipo','Cupo']);
+      var espHoja = msb_getHojaSegura(ss, 'Espacios', ['ID_espacio','Nombre','Ubicación','Capacidad']);
+      var invHoja = msb_getHojaSegura(ss, 'Inventario', ['ID_material','Nombre_material','Categoria','Cantidad_total','Cantidad_disponible','Unidad','Ubicacion','Condicion','Responsable_ID','Estado','Observaciones']);
+      
+      // Encabezados canónicos completos para Solicitudes F02 (19 columnas oficiales)
+      var solHeadersOficiales = ['ID_solicitud','Fecha_solicitud','Solicitante_ID','Solicitante_Nombre','Solicitante_Rol','Nivel_prioridad','Prioridad_Etiqueta','Tipo_solicitud','ID_recurso','Recurso_Nombre','Fecha_uso','Hora_inicio','Hora_fin','Cantidad','Proposito','Estado','Revisado_por_ID','Fecha_resolucion','Motivo_observaciones'];
+      var solHoja = msb_getHojaSegura(ss, 'Solicitudes', solHeadersOficiales);
+      
+      // Auto-reparar encabezados de Solicitudes si la hoja tiene la estructura antigua de 14 columnas
+      var solHeadersActuales = msb_getHeaders(solHoja);
+      if (solHeadersActuales.length < 19 || solHeadersActuales.indexOf('Solicitante_Nombre') === -1) {
+        solHoja.getRange(1, 1, 1, solHeadersOficiales.length).setValues([solHeadersOficiales]);
+        solHeadersActuales = solHeadersOficiales;
       }
-    });
 
+      var insHoja = msb_getHojaSegura(ss, 'Inscripciones_Asistencia', ['ID_registro','ID_actividad','ID_participante','Fecha_inscripción','Estado_inscripcion','Asistencia','Fecha_asistencia','Observaciones']);
+      var galHoja = msb_getHojaSegura(ss, 'Galeria', ['id','titulo','descripcion','fecha','categoria','url','tipoMedio','videoUrl','tipoVideo','autor','destacada']);
+      var idHoja = msb_getHojaSegura(ss, 'Identidades', ['id','username','pinHash','nombre','apellidos','sector','correo','tipoCuenta','estado','consentimiento','fechaAlta','rol','licenciatura','semestre','grupo','observaciones']);
+      var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', ['idRespuesta','tipoEncuesta','tituloEncuesta','idActividad','nombreActividad','sector','puntuacionPromedio','respuestas_json','comentarios','fechaRegistro','idUsuario','nombreUsuario']);
+      var pfHoja = msb_getHojaSegura(ss, 'Pruebas_Fisicas', ['idEvaluacion','idParticipante','nombreParticipante','fechaRegistro','puntuacionGeneral','categoriaRendimiento','inicial_json','final_json']);
+      var autHoja = msb_getHojaSegura(ss, 'Autoridades', ['tituloJefatura','jefeMatutinoNombre','jefeMatutinoCargo','jefeMatutinoFirma','jefeVespertinoNombre','jefeVespertinoCargo','jefeVespertinoFirma','ultimaActualizacion']);
+      var cfgHoja = msb_getHojaSegura(ss, 'Config_Evaluaciones', ['habilitada','fechaHabilitacion','urlFormEvaluacionEncargados','urlFormSatisfaccionServicios','urlFormPercepcionBienestar','mensajeAccesoRestringido','ultimaActualizacion']);
+      var escHoja = msb_getHojaSegura(ss, 'Sello_Activo', ['url','tipo','nombre','fechaActualizacion']);
+
+      var autList = msb_getAllObjects(autHoja, msb_getHeaders(autHoja));
+      var cfgList = msb_getAllObjects(cfgHoja, msb_getHeaders(cfgHoja));
+      var escList = msb_getAllObjects(escHoja, msb_getHeaders(escHoja));
+
+      // Recopilar evaluaciones tanto de la hoja unificada 'Evaluaciones' como de las hojas de Google Forms vinculadas
+      var todasLasEvaluaciones = msb_getAllObjects(evHoja, msb_getHeaders(evHoja));
+
+      // Buscar hojas individuales de Google Forms en el libro
+      var hojasPosiblesForms = [
+        'Evaluacion_Encargados', 'Respuestas de formulario 1', 'Evaluación de encargados deportivos',
+        'Satisfaccion_Servicios', 'Respuestas de formulario 2', 'Formulario de satisfacción',
+        'Bienestar_Salud', 'Respuestas de formulario 3', 'Formulario bienestar'
+      ];
+
+      hojasPosiblesForms.forEach(function(nomH) {
+        try {
+          var h = ss.getSheetByName(nomH);
+          if (h && h.getLastRow() > 1) {
+            var hHeaders = msb_getHeaders(h);
+            var hRows = msb_getAllObjects(h, hHeaders);
+            hRows.forEach(function(r) {
+              todasLasEvaluaciones.push(r);
+            });
+          }
+        } catch (eH) {}
+      });
+
+      return ContentService.createTextOutput(JSON.stringify({
+        ok: true,
+        actividades: msb_getAllObjects(actHoja, msb_getHeaders(actHoja)),
+        espacios: msb_getAllObjects(espHoja, msb_getHeaders(espHoja)),
+        inventario: msb_getAllObjects(invHoja, msb_getHeaders(invHoja)),
+        solicitudes: msb_getAllObjects(solHoja, solHeadersActuales),
+        inscripciones: msb_getAllObjects(insHoja, msb_getHeaders(insHoja)),
+        galeria: msb_getAllObjects(galHoja, msb_getHeaders(galHoja)),
+        identidades: msb_getAllObjects(idHoja, msb_getHeaders(idHoja)),
+        evaluaciones: todasLasEvaluaciones,
+        pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja)),
+        autoridades: autList.length ? autList[0] : null,
+        configEvaluaciones: cfgList.length ? cfgList[0] : null,
+        sello_activo: escList.length ? escList[0] : null
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'API Activa 1.1' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({
-      ok: true,
-      actividades: msb_getAllObjects(actHoja, msb_getHeaders(actHoja)),
-      espacios: msb_getAllObjects(espHoja, msb_getHeaders(espHoja)),
-      inventario: msb_getAllObjects(invHoja, msb_getHeaders(invHoja)),
-      solicitudes: msb_getAllObjects(solHoja, solHeadersActuales),
-      inscripciones: msb_getAllObjects(insHoja, msb_getHeaders(insHoja)),
-      galeria: msb_getAllObjects(galHoja, msb_getHeaders(galHoja)),
-      identidades: msb_getAllObjects(idHoja, msb_getHeaders(idHoja)),
-      evaluaciones: todasLasEvaluaciones,
-      pruebas_fisicas: msb_getAllObjects(pfHoja, msb_getHeaders(pfHoja)),
-      autoridades: autList.length ? autList[0] : null,
-      configEvaluaciones: cfgList.length ? cfgList[0] : null,
-      sello_activo: escList.length ? escList[0] : null
+      ok: false,
+      error: err.toString(),
+      mensaje: 'Excepción en doGet: ' + err.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
-
-  return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'API Activa 1.1' }))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
