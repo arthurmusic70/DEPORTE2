@@ -266,6 +266,7 @@ export interface ImagenActividad {
   titulo: string;
   descripcion?: string;
   fecha: string;
+  categoria?: string; // ej: 'Firmas y Sellos Oficiales', 'Torneos', etc.
   actividadId?: string;
   actividadNombre?: string;
   url: string; // Base64 data URL o URL externa para imagen / póster

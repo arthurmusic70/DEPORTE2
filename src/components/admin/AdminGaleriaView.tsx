@@ -26,6 +26,7 @@ import {
   Play,
   Film,
   Maximize2,
+  ShieldCheck,
   X
 } from 'lucide-react';
 

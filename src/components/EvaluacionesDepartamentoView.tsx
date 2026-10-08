@@ -48,6 +48,7 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
   const [formConfig, setFormConfig] = useState<ConfiguracionEvaluaciones>(() => MSBDatabase.getConfiguracionEvaluaciones());
   const [avisoAdminGuardado, setAvisoAdminGuardado] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
+  const [guardandoFormulario, setGuardandoFormulario] = useState(false);
   const [copiadoHeader, setCopiadoHeader] = useState<string | null>(null);
 
   const [encuestaActiva, setEncuestaActiva] = useState<TipoEncuesta>('evaluacion_encargados');
@@ -149,128 +150,143 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
   };
 
   // Enviar Formulario 1: Evaluación a Encargados
-  const handleEnviarEvaluacionEncargado = (e: React.FormEvent) => {
+  const handleEnviarEvaluacionEncargado = async (e: React.FormEvent) => {
     e.preventDefault();
-    const act = actividades.find(a => a.ID_actividad === encargadoClubId);
-    const prom = Number(((preparacionExperto + comunicacionEncargado + estrategiasTrabajo + usoRecursosMateriales + cumplimientoObjetivo) / 5).toFixed(1));
+    setGuardandoFormulario(true);
+    try {
+      const act = actividades.find(a => a.ID_actividad === encargadoClubId);
+      const prom = Number(((preparacionExperto + comunicacionEncargado + estrategiasTrabajo + usoRecursosMateriales + cumplimientoObjetivo) / 5).toFixed(1));
 
-    const res = MSBDatabase.guardarRespuestaEncuesta({
-      tipoEncuesta: 'evaluacion_encargados',
-      tituloEncuesta: 'Evaluación de Desempeño a Encargados Deportivos',
-      idUsuario: 'ANONIMO',
-      nombreUsuario: 'Participante Anónimo',
-      correoUsuario: '',
-      sector: (usuario.sector || 'Estudiante') as Sector,
-      idActividad: encargadoClubId,
-      nombreActividad: act ? `${act.Nombre} (${limpiarTituloLicenciado(act.Responsable_Nombre)})` : 'Club Deportivo',
-      fechaRegistro: msb_obtenerFechaHoraLocal(),
-      puntuacionPromedio: prom,
-      respuestas: {
-        preparacionExperto,
-        comunicacion: comunicacionEncargado,
-        estrategias: estrategiasTrabajo,
-        recursos: usoRecursosMateriales,
-        cumplimientoObjetivo
-      },
-      comentarios: sugerenciasMejoraEncargado
-    });
+      const res = await MSBDatabase.guardarRespuestaEncuesta({
+        tipoEncuesta: 'evaluacion_encargados',
+        tituloEncuesta: 'Evaluación de Desempeño a Encargados Deportivos',
+        idUsuario: 'ANONIMO',
+        nombreUsuario: 'Participante Anónimo',
+        correoUsuario: '',
+        sector: (usuario.sector || 'Estudiante') as Sector,
+        idActividad: encargadoClubId,
+        nombreActividad: act ? `${act.Nombre} (${limpiarTituloLicenciado(act.Responsable_Nombre)})` : 'Club Deportivo',
+        fechaRegistro: msb_obtenerFechaHoraLocal(),
+        puntuacionPromedio: prom,
+        respuestas: {
+          preparacionExperto,
+          comunicacion: comunicacionEncargado,
+          estrategias: estrategiasTrabajo,
+          recursos: usoRecursosMateriales,
+          cumplimientoObjetivo
+        },
+        comentarios: sugerenciasMejoraEncargado
+      });
 
-    if (res.ok) {
-      setRespuestas(MSBDatabase.getRespuestasEncuestas());
-      setMensajeExito('✓ Tu evaluación anónima al encargado deportivo ha sido guardada y respaldada en la Base Maestra.');
-      setSugerenciasMejoraEncargado('');
-      setTimeout(() => setMensajeExito(null), 4000);
+      if (res.ok) {
+        setRespuestas(MSBDatabase.getRespuestasEncuestas());
+        setMensajeExito('✓ Tu evaluación anónima al encargado deportivo ha sido guardada directamente en la pestaña oficial de la Base Maestra.');
+        setSugerenciasMejoraEncargado('');
+        setTimeout(() => setMensajeExito(null), 5000);
+      }
+    } finally {
+      setGuardandoFormulario(false);
     }
   };
 
   // Enviar Formulario 2: Satisfacción de Servicios
-  const handleEnviarSatisfaccionServicios = (e: React.FormEvent) => {
+  const handleEnviarSatisfaccionServicios = async (e: React.FormEvent) => {
     e.preventDefault();
-    const sum = ofertaVariada + programasSaludOrganizados + difusionOportuna + capacidadCuposSuficiente +
-      mantenimientoLimpieza + mantenimientoPreventivo + iluminacionVentilacion + accesibilidadInclusiva +
-      atencionPersonal + tramitesAgiles + informacionClara + canalesComunicacion +
-      resolucionInconformidades + promocionSaludBienestar + satisfaccionGeneral;
-    const prom = Number((sum / 15).toFixed(1));
+    setGuardandoFormulario(true);
+    try {
+      const sum = ofertaVariada + programasSaludOrganizados + difusionOportuna + capacidadCuposSuficiente +
+        mantenimientoLimpieza + mantenimientoPreventivo + iluminacionVentilacion + accesibilidadInclusiva +
+        atencionPersonal + tramitesAgiles + informacionClara + canalesComunicacion +
+        resolucionInconformidades + promocionSaludBienestar + satisfaccionGeneral;
+      const prom = Number((sum / 15).toFixed(1));
 
-    const res = MSBDatabase.guardarRespuestaEncuesta({
-      tipoEncuesta: 'satisfaccion_servicios',
-      tituloEncuesta: 'Satisfacción de Servicios del Departamento de Deporte y Salud',
-      idUsuario: 'ANONIMO',
-      nombreUsuario: 'Participante Anónimo',
-      correoUsuario: '',
-      sector: sectorSatisfaccion as Sector,
-      idActividad: 'GENERAL',
-      nombreActividad: 'Departamento de Deporte y Salud',
-      fechaRegistro: msb_obtenerFechaHoraLocal(),
-      puntuacionPromedio: prom,
-      respuestas: {
-        ofertaVariada,
-        programasSaludOrganizados,
-        difusionOportuna,
-        capacidadCuposSuficiente,
-        mantenimientoLimpieza,
-        mantenimientoPreventivo,
-        iluminacionVentilacion,
-        accesibilidadInclusiva,
-        atencionPersonal,
-        tramitesAgiles,
-        informacionClara,
-        canalesComunicacion,
-        resolucionInconformidades,
-        promocionSaludBienestar,
-        satisfaccionGeneral,
-        fortalezas: fortalezasServicios,
-        sugerencias: sugerenciasServicios
-      },
-      comentarios: sugerenciasServicios ? `Sugerencias: ${sugerenciasServicios} | Fortalezas: ${fortalezasServicios}` : fortalezasServicios
-    });
+      const res = await MSBDatabase.guardarRespuestaEncuesta({
+        tipoEncuesta: 'satisfaccion_servicios',
+        tituloEncuesta: 'Satisfacción de Servicios del Departamento de Deporte y Salud',
+        idUsuario: 'ANONIMO',
+        nombreUsuario: 'Participante Anónimo',
+        correoUsuario: '',
+        sector: sectorSatisfaccion as Sector,
+        idActividad: 'GENERAL',
+        nombreActividad: 'Departamento de Deporte y Salud',
+        fechaRegistro: msb_obtenerFechaHoraLocal(),
+        puntuacionPromedio: prom,
+        respuestas: {
+          ofertaVariada,
+          programasSaludOrganizados,
+          difusionOportuna,
+          capacidadCuposSuficiente,
+          mantenimientoLimpieza,
+          mantenimientoPreventivo,
+          iluminacionVentilacion,
+          accesibilidadInclusiva,
+          atencionPersonal,
+          tramitesAgiles,
+          informacionClara,
+          canalesComunicacion,
+          resolucionInconformidades,
+          promocionSaludBienestar,
+          satisfaccionGeneral,
+          fortalezas: fortalezasServicios,
+          sugerencias: sugerenciasServicios
+        },
+        comentarios: sugerenciasServicios ? `Sugerencias: ${sugerenciasServicios} | Fortalezas: ${fortalezasServicios}` : fortalezasServicios
+      });
 
-    if (res.ok) {
-      setRespuestas(MSBDatabase.getRespuestasEncuestas());
-      setMensajeExito('✓ Tu encuesta anónima de satisfacción departamental ha sido registrada en la Base Maestra.');
-      setFortalezasServicios('');
-      setSugerenciasServicios('');
-      setTimeout(() => setMensajeExito(null), 4000);
+      if (res.ok) {
+        setRespuestas(MSBDatabase.getRespuestasEncuestas());
+        setMensajeExito('✓ Tu encuesta anónima de satisfacción departamental ha sido registrada en la pestaña correspondiente de la Base Maestra.');
+        setFortalezasServicios('');
+        setSugerenciasServicios('');
+        setTimeout(() => setMensajeExito(null), 5000);
+      }
+    } finally {
+      setGuardandoFormulario(false);
     }
   };
 
   // Enviar Formulario 3: Percepción de Bienestar
-  const handleEnviarBienestarSalud = (e: React.FormEvent) => {
+  const handleEnviarBienestarSalud = async (e: React.FormEvent) => {
     e.preventDefault();
-    const sum = vidaActiva + descansoEnergia + alimentacionHidratacion + controlEstres + vitalidadBalance +
-      estadoAnimo + sentidoPertenencia + convivenciaRespeto + satisfaccionDepartamental + recomendacionInstitucional;
-    const prom = Number((sum / 10).toFixed(1));
+    setGuardandoFormulario(true);
+    try {
+      const sum = vidaActiva + descansoEnergia + alimentacionHidratacion + controlEstres + vitalidadBalance +
+        estadoAnimo + sentidoPertenencia + convivenciaRespeto + satisfaccionDepartamental + recomendacionInstitucional;
+      const prom = Number((sum / 10).toFixed(1));
 
-    const res = MSBDatabase.guardarRespuestaEncuesta({
-      tipoEncuesta: 'bienestar_salud',
-      tituloEncuesta: 'Percepción de Bienestar en Salud y Cultura Física',
-      idUsuario: 'ANONIMO',
-      nombreUsuario: 'Participante Anónimo',
-      correoUsuario: '',
-      sector: sectorBienestar as Sector,
-      idActividad: 'GENERAL',
-      nombreActividad: 'Desarrollo Formativo y Salud Integral',
-      fechaRegistro: msb_obtenerFechaHoraLocal(),
-      puntuacionPromedio: prom,
-      respuestas: {
-        vidaActiva,
-        descansoEnergia,
-        alimentacionHidratacion,
-        controlEstres,
-        vitalidadBalance,
-        estadoAnimo,
-        sentidoPertenencia,
-        convivenciaRespeto,
-        satisfaccionDepartamental,
-        recomendacionInstitucional
-      },
-      comentarios: ''
-    });
+      const res = await MSBDatabase.guardarRespuestaEncuesta({
+        tipoEncuesta: 'bienestar_salud',
+        tituloEncuesta: 'Percepción de Bienestar en Salud y Cultura Física',
+        idUsuario: 'ANONIMO',
+        nombreUsuario: 'Participante Anónimo',
+        correoUsuario: '',
+        sector: sectorBienestar as Sector,
+        idActividad: 'GENERAL',
+        nombreActividad: 'Desarrollo Formativo y Salud Integral',
+        fechaRegistro: msb_obtenerFechaHoraLocal(),
+        puntuacionPromedio: prom,
+        respuestas: {
+          vidaActiva,
+          descansoEnergia,
+          alimentacionHidratacion,
+          controlEstres,
+          vitalidadBalance,
+          estadoAnimo,
+          sentidoPertenencia,
+          convivenciaRespeto,
+          satisfaccionDepartamental,
+          recomendacionInstitucional
+        },
+        comentarios: ''
+      });
 
-    if (res.ok) {
-      setRespuestas(MSBDatabase.getRespuestasEncuestas());
-      setMensajeExito('✓ Tu encuesta anónima de bienestar y salud ha sido guardada en la Base Maestra.');
-      setTimeout(() => setMensajeExito(null), 4000);
+      if (res.ok) {
+        setRespuestas(MSBDatabase.getRespuestasEncuestas());
+        setMensajeExito('✓ Tu encuesta anónima de bienestar y salud ha sido guardada en la pestaña oficial de la Base Maestra.');
+        setTimeout(() => setMensajeExito(null), 5000);
+      }
+    } finally {
+      setGuardandoFormulario(false);
     }
   };
 
@@ -720,10 +736,20 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 flex items-center space-x-1.5 cursor-pointer transition-all"
+                  disabled={guardandoFormulario}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/30 flex items-center space-x-1.5 cursor-pointer transition-all"
                 >
-                  <Send className="w-4 h-4" />
-                  <span>Enviar Evaluación de Encargado</span>
+                  {guardandoFormulario ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Registrando en Base Maestra...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Enviar Evaluación de Encargado</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -794,10 +820,20 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center space-x-1.5 cursor-pointer transition-all"
+                  disabled={guardandoFormulario}
+                  className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center space-x-1.5 cursor-pointer transition-all"
                 >
-                  <Send className="w-4 h-4" />
-                  <span>Enviar Formulario de Satisfacción</span>
+                  {guardandoFormulario ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Registrando en Base Maestra...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Enviar Formulario de Satisfacción</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -837,10 +873,20 @@ export const EvaluacionesDepartamentoView: React.FC<EvaluacionesDepartamentoView
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center space-x-1.5 cursor-pointer transition-all"
+                  disabled={guardandoFormulario}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center space-x-1.5 cursor-pointer transition-all"
                 >
-                  <Send className="w-4 h-4" />
-                  <span>Enviar Formulario de Bienestar</span>
+                  {guardandoFormulario ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Registrando en Base Maestra...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Enviar Formulario de Bienestar</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

@@ -508,6 +508,27 @@ export function normalizarEvaluacion(raw: any, index: number = 0): import('../ty
       }
     });
 
+    // Encabezados adicionales compartidos por el usuario para Formulario de Satisfacción
+    const mapaAdicionalSatisfaccion: Record<string, string> = {
+      'Los canales de comunicación institucional (redes, cartelera, avisos digitales) mantienen informada a la comunidad.': 'canalesComunicacion',
+      'El Departamento atiende y da seguimiento oportuno a dudas, sugerencias o inconformidades.': 'resolucionInconformidades',
+      'El Departamento promueve activamente la salud integral, el autocuidado y la prevención a través del deporte.': 'promocionSaludBienestar',
+      'En general, ¿cuál es tu nivel de satisfacción con los servicios, espacios y atención brindados por el Departamento de Deporte y Salud?': 'satisfaccionGeneral',
+      'Menciona los aspectos o fortalezas más positivos de los servicios y actividades deportivas que consideres valiosos:': 'fortalezas',
+      '¿Qué sugerencias o áreas de mejora propones para que el Departamento de Deporte y Salud eleve la calidad de sus servicios?': 'sugerencias'
+    };
+
+    Object.entries(mapaAdicionalSatisfaccion).forEach(([header, key]) => {
+      if (raw[header] !== undefined && raw[header] !== '') {
+        if (key === 'fortalezas' || key === 'sugerencias') {
+          respuestas[key] = String(raw[header]).trim();
+        } else {
+          const val = Number(raw[header]);
+          respuestas[key] = isNaN(val) ? 5 : val;
+        }
+      }
+    });
+
     if (raw['¿Qué fortalezas o aspectos positivos destaca de la gestión del Departamento de Deporte y Salud?'] !== undefined) {
       respuestas.fortalezas = String(raw['¿Qué fortalezas o aspectos positivos destaca de la gestión del Departamento de Deporte y Salud?']).trim();
     }
@@ -538,6 +559,47 @@ export function normalizarEvaluacion(raw: any, index: number = 0): import('../ty
       }
     });
   }
+
+  // Mapeo flexible adicional por palabras clave en las claves del objeto
+  Object.keys(raw).forEach(rawK => {
+    const lk = rawK.toLowerCase().trim();
+    if (tipoEncuesta === 'evaluacion_encargados') {
+      if ((lk.includes('preparaci') || lk.includes('experto')) && respuestas.preparacionExperto === undefined) respuestas.preparacionExperto = Number(raw[rawK]) || 5;
+      if (lk.includes('comunicaci') && respuestas.comunicacion === undefined) respuestas.comunicacion = Number(raw[rawK]) || 5;
+      if (lk.includes('estrategia') && respuestas.estrategias === undefined) respuestas.estrategias = Number(raw[rawK]) || 5;
+      if ((lk.includes('recurso') || lk.includes('material')) && respuestas.recursos === undefined) respuestas.recursos = Number(raw[rawK]) || 5;
+      if ((lk.includes('cumplimiento') || lk.includes('objetivo')) && respuestas.cumplimientoObjetivo === undefined) respuestas.cumplimientoObjetivo = Number(raw[rawK]) || 5;
+    } else if (tipoEncuesta === 'satisfaccion_servicios') {
+      if ((lk.includes('oferta') && lk.includes('variada')) && respuestas.ofertaVariada === undefined) respuestas.ofertaVariada = Number(raw[rawK]) || 5;
+      if ((lk.includes('evaluación física') || lk.includes('evaluacion fisica')) && respuestas.programasSaludOrganizados === undefined) respuestas.programasSaludOrganizados = Number(raw[rawK]) || 5;
+      if (lk.includes('difunde') && respuestas.difusionOportuna === undefined) respuestas.difusionOportuna = Number(raw[rawK]) || 5;
+      if (lk.includes('cupos') && respuestas.capacidadCuposSuficiente === undefined) respuestas.capacidadCuposSuficiente = Number(raw[rawK]) || 5;
+      if ((lk.includes('limpieza') || lk.includes('higiene')) && respuestas.mantenimientoLimpieza === undefined) respuestas.mantenimientoLimpieza = Number(raw[rawK]) || 5;
+      if (lk.includes('mantenimiento preventivo') && respuestas.mantenimientoPreventivo === undefined) respuestas.mantenimientoPreventivo = Number(raw[rawK]) || 5;
+      if (lk.includes('iluminaci') && respuestas.iluminacionVentilacion === undefined) respuestas.iluminacionVentilacion = Number(raw[rawK]) || 5;
+      if (lk.includes('movilidad reducida') && respuestas.accesibilidadInclusiva === undefined) respuestas.accesibilidadInclusiva = Number(raw[rawK]) || 5;
+      if (lk.includes('amable') && respuestas.atencionPersonal === undefined) respuestas.atencionPersonal = Number(raw[rawK]) || 5;
+      if (lk.includes('tramites') && respuestas.tramitesAgiles === undefined) respuestas.tramitesAgiles = Number(raw[rawK]) || 5;
+      if ((lk.includes('reglamentos') || lk.includes('transparente')) && respuestas.informacionClara === undefined) respuestas.informacionClara = Number(raw[rawK]) || 5;
+      if (lk.includes('canales de comunicaci') && respuestas.canalesComunicacion === undefined) respuestas.canalesComunicacion = Number(raw[rawK]) || 5;
+      if (lk.includes('inconformidades') && respuestas.resolucionInconformidades === undefined) respuestas.resolucionInconformidades = Number(raw[rawK]) || 5;
+      if (lk.includes('salud integral') && respuestas.promocionSaludBienestar === undefined) respuestas.promocionSaludBienestar = Number(raw[rawK]) || 5;
+      if (lk.includes('satisfacci') && lk.includes('general') && respuestas.satisfaccionGeneral === undefined) respuestas.satisfaccionGeneral = Number(raw[rawK]) || 5;
+      if (lk.includes('fortalezas') && !respuestas.fortalezas) respuestas.fortalezas = String(raw[rawK]).trim();
+      if ((lk.includes('sugerencias') || lk.includes('mejora')) && !respuestas.sugerencias) respuestas.sugerencias = String(raw[rawK]).trim();
+    } else if (tipoEncuesta === 'bienestar_salud') {
+      if (lk.includes('vida activa') && respuestas.vidaActiva === undefined) respuestas.vidaActiva = Number(raw[rawK]) || 5;
+      if (lk.includes('descanso') && respuestas.descansoEnergia === undefined) respuestas.descansoEnergia = Number(raw[rawK]) || 5;
+      if (lk.includes('alimentaci') && respuestas.alimentacionHidratacion === undefined) respuestas.alimentacionHidratacion = Number(raw[rawK]) || 5;
+      if (lk.includes('estrés') && respuestas.controlEstres === undefined) respuestas.controlEstres = Number(raw[rawK]) || 5;
+      if (lk.includes('vitalidad') && respuestas.vitalidadBalance === undefined) respuestas.vitalidadBalance = Number(raw[rawK]) || 5;
+      if (lk.includes('ánimo') && respuestas.estadoAnimo === undefined) respuestas.estadoAnimo = Number(raw[rawK]) || 5;
+      if (lk.includes('pertenencia') && respuestas.sentidoPertenencia === undefined) respuestas.sentidoPertenencia = Number(raw[rawK]) || 5;
+      if (lk.includes('convivencia') && respuestas.convivenciaRespeto === undefined) respuestas.convivenciaRespeto = Number(raw[rawK]) || 5;
+      if (lk.includes('satisfacción departamental') && respuestas.satisfaccionDepartamental === undefined) respuestas.satisfaccionDepartamental = Number(raw[rawK]) || 5;
+      if (lk.includes('recomendaci') && respuestas.recomendacionInstitucional === undefined) respuestas.recomendacionInstitucional = Number(raw[rawK]) || 5;
+    }
+  });
 
   // Calcular puntuación promedio
   let puntuacionPromedio = Number(raw.Puntuación ?? raw.puntuacionPromedio ?? raw.promedio ?? 0);
@@ -2660,7 +2722,7 @@ export class MSBDatabase {
     return stored.map((r, idx) => normalizarEvaluacion(r, idx));
   }
 
-  static guardarRespuestaEncuesta(respuesta: Omit<import('../types').RespuestaEncuesta, 'idRespuesta'>): { ok: boolean; idRespuesta: string; mensaje: string } {
+  static async guardarRespuestaEncuesta(respuesta: Omit<import('../types').RespuestaEncuesta, 'idRespuesta'>): Promise<{ ok: boolean; idRespuesta: string; mensaje: string }> {
     const list = this.getRespuestasEncuestas();
     const idRespuesta = this.nextID('ENC', list);
     
@@ -2678,8 +2740,8 @@ export class MSBDatabase {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('msb_datos_actualizados'));
     }
-    this.postToGoogleSheets({ action: 'guardarEvaluacion', evaluacion: nueva });
-    return { ok: true, idRespuesta, mensaje: '✓ Evaluación anónima registrada exitosamente. ¡Gracias por tu valiosa retroalimentación!' };
+    await this.postToGoogleSheets({ action: 'guardarEvaluacion', evaluacion: nueva });
+    return { ok: true, idRespuesta, mensaje: '✓ Evaluación anónima registrada exitosamente en Base Maestra.' };
   }
 
   // Control de Apertura y Habilitación de Evaluaciones por el Administrador
@@ -3569,6 +3631,236 @@ function msb_getAllObjects(hoja, headers) {
   return result;
 }
 
+function msb_obtenerEncabezadosOficialesPorTipo(tipo) {
+  if (tipo === 'evaluacion_encargados') {
+    return [
+      'Marca temporal',
+      'Puntuación',
+      'Correo',
+      'Club al que pertenece',
+      'Preparación del experto (tallerista, conferencista, seminarista, coordinador de actividades).',
+      'Comunicación con los participantes',
+      'Estrategias y/o actividades de trabajo',
+      'Uso de recursos y materiales',
+      'Cumplimiento del objetivo',
+      'Sugerencias para la mejora.'
+    ];
+  }
+  if (tipo === 'satisfaccion_servicios') {
+    return [
+      'Marca temporal',
+      'TIPO DE USUARIO',
+      'La oferta de actividades deportivas, acondicionamiento y programas de salud es variada y responde a las necesidades de la comunidad.',
+      'Los programas de evaluación física, nutrición y cuidado médico-deportivo están bien organizados y son de fácil acceso.',
+      'El Departamento difunde con oportunidad los calendarios, horarios y convocatorias de torneos y actividades.',
+      'La capacidad de cupos y horarios ofertados es suficiente para atender la demanda de los usuarios.',
+      'El Departamento mantiene las instalaciones (gimnasio, cancha polivalente, sanitarios) en óptimas condiciones de limpieza e higiene.',
+      'Existe un programa efectivo de mantenimiento preventivo y reemplazo oportuno de equipos y materiales deportivos deteriorados.',
+      'Las áreas deportivas cuentan con iluminación, ventilación y señalización de seguridad adecuadas para la práctica.',
+      'Los espacios deportivos y sus accesos cuentan con adaptaciones para personas con movilidad reducida u otras necesidades especiales.',
+      'El personal del Departamento brinda una atención amable, eficiente y respetuosa.',
+      'Los trámites departamentales (inscripciones, préstamo de material, permisos) son ágiles y sencillos.',
+      'La información sobre reglamentos y requisitos de servicio es clara, transparente y accesible.',
+      'Los canales de comunicación institucional (redes, cartelera, avisos digitales) mantienen informada a la comunidad.',
+      'El Departamento atiende y da seguimiento oportuno a dudas, sugerencias o inconformidades.',
+      'El Departamento promueve activamente la salud integral, el autocuidado y la prevención a través del deporte.',
+      'En general, ¿cuál es tu nivel de satisfacción con los servicios, espacios y atención brindados por el Departamento de Deporte y Salud?',
+      'Menciona los aspectos o fortalezas más positivos de los servicios y actividades deportivas que consideres valiosos:',
+      '¿Qué sugerencias o áreas de mejora propones para que el Departamento de Deporte y Salud eleve la calidad de sus servicios?'
+    ];
+  }
+  return [
+    'Marca temporal',
+    'TIPO DE USUARIO',
+    'Mantenimiento de Vida Activa: Realizo actividad física o deporte de forma regular como parte de mi rutina diaria/semanal.',
+    'Hábitos de Descanso y Energía: Considero que mis hábitos de descanso y sueño me permiten mantener suficiente energía durante mis jornadas escolares/laborales.',
+    'Alimentación e Hidratación: Tengo acceso a opciones de alimentación e hidratación saludables dentro o alrededor de la institución.',
+    'Control del Estrés y Agotamiento: Cuento con herramientas y apoyo para gestionar el estrés derivado de las exigencias académicas o laborales.',
+    'Vitalidad y Balance Personal: Mantengo un equilibrio adecuado entre mis responsabilidades educativas/laborales y mi bienestar personal.',
+    'Estado de Ánimo y Florecimiento: En general, me siento motivado, con ánimo positivo y con un claro sentido de desarrollo personal en la institución.',
+    'Sentido de Pertenencia: Me siento integrado y respaldado por la comunidad universitaria en las actividades deportivas y de salud.',
+    'Convivencia Pacífica y Respeto: El ambiente en los espacios deportivos y de acondicionamiento es de respeto, juego limpio y libre de violencia/acoso.',
+    'Satisfacción Departamental: En general, estoy satisfecho con la contribución del Departamento de Deporte y Salud a mi calidad de vida universitaria.',
+    'Recomendación Institucional: Recomendaría a otros compañeros participar en los programas de salud, cultura física y acondicionamiento de la institución'
+  ];
+}
+
+function msb_encontrarHojaFormulario(ss, tipo) {
+  var nombresCandidatos = [];
+  if (tipo === 'evaluacion_encargados') {
+    nombresCandidatos = [
+      'Evaluacion_Encargados',
+      'Respuestas de formulario 1',
+      'Evaluación de encargados deportivos',
+      'Evaluacion de encargados deportivos',
+      'Encargados',
+      'Evaluacion Encargados'
+    ];
+  } else if (tipo === 'satisfaccion_servicios') {
+    nombresCandidatos = [
+      'Satisfaccion_Servicios',
+      'Respuestas de formulario 2',
+      'Formulario de satisfacción',
+      'Formulario de satisfaccion',
+      'Satisfacción',
+      'Satisfaccion',
+      'Satisfacción de servicios'
+    ];
+  } else {
+    nombresCandidatos = [
+      'Bienestar_Salud',
+      'Respuestas de formulario 3',
+      'Formulario bienestar',
+      'Bienestar y salud',
+      'Bienestar y Salud',
+      'Bienestar'
+    ];
+  }
+
+  for (var i = 0; i < nombresCandidatos.length; i++) {
+    var hDirecta = ss.getSheetByName(nombresCandidatos[i]);
+    if (hDirecta) return hDirecta;
+  }
+
+  var todasHojas = ss.getSheets();
+  for (var j = 0; j < todasHojas.length; j++) {
+    var hoja = todasHojas[j];
+    var nombreLower = hoja.getName().toLowerCase().trim();
+    if (tipo === 'evaluacion_encargados' && (nombreLower.includes('encargado') || nombreLower.includes('formulario 1'))) {
+      return hoja;
+    }
+    if (tipo === 'satisfaccion_servicios' && (nombreLower.includes('satisfacci') || nombreLower.includes('formulario 2'))) {
+      return hoja;
+    }
+    if (tipo === 'bienestar_salud' && (nombreLower.includes('bienestar') || nombreLower.includes('formulario 3'))) {
+      return hoja;
+    }
+  }
+
+  for (var k = 0; k < todasHojas.length; k++) {
+    var hojaHdr = todasHojas[k];
+    if (hojaHdr.getLastRow() >= 1 && hojaHdr.getLastColumn() >= 3) {
+      try {
+        var strHeaders = hojaHdr.getRange(1, 1, 1, Math.min(hojaHdr.getLastColumn(), 25)).getValues()[0].join(' ').toLowerCase();
+        if (tipo === 'evaluacion_encargados' && (strHeaders.includes('experto') || strHeaders.includes('club al que pertenece'))) {
+          return hojaHdr;
+        }
+        if (tipo === 'satisfaccion_servicios' && (strHeaders.includes('oferta de actividades') || strHeaders.includes('fortalezas'))) {
+          return hojaHdr;
+        }
+        if (tipo === 'bienestar_salud' && (strHeaders.includes('vida activa') || strHeaders.includes('hábitos de descanso'))) {
+          return hojaHdr;
+        }
+      } catch (errHdr) {}
+    }
+  }
+
+  var nombreDefecto = tipo === 'evaluacion_encargados' ? 'Evaluacion_Encargados' :
+                      tipo === 'satisfaccion_servicios' ? 'Satisfaccion_Servicios' : 'Bienestar_Salud';
+  var encOficiales = msb_obtenerEncabezadosOficialesPorTipo(tipo);
+  return msb_getHojaSegura(ss, nombreDefecto, encOficiales);
+}
+
+function msb_construirFilaEvaluacion(tipo, ev, headers) {
+  var ahora = Utilities.formatDate(new Date(), "America/Monterrey", "dd/MM/yyyy HH:mm:ss");
+  var r = ev.respuestas || {};
+  var fila = [];
+
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i] || '').toLowerCase().trim();
+    var val = '';
+
+    if (h.includes('marca temporal') || h.includes('timestamp') || h.includes('fecha')) {
+      val = ev.fechaRegistro || ahora;
+    } else if (h.includes('tipo de usuario') || h.includes('sector') || h.includes('rol')) {
+      val = ev.sector || 'Estudiante';
+    } else if (h.includes('puntuaci') || h.includes('calificaci') || h.includes('promedio')) {
+      val = ev.puntuacionPromedio || 5;
+    } else if (h.includes('correo') || h.includes('email')) {
+      val = ev.correoUsuario || 'Participante Anónimo';
+    } else if (h.includes('club') || h.includes('actividad')) {
+      val = ev.nombreActividad || 'Club Deportivo';
+    } 
+    // Formulario 1: Encargados
+    else if (h.includes('preparaci') || h.includes('experto')) {
+      val = r.preparacionExperto !== undefined ? r.preparacionExperto : 5;
+    } else if (h.includes('comunicaci')) {
+      val = r.comunicacion !== undefined ? r.comunicacion : 5;
+    } else if (h.includes('estrategia')) {
+      val = r.estrategias !== undefined ? r.estrategias : 5;
+    } else if (h.includes('recurso') || h.includes('material')) {
+      val = r.recursos !== undefined ? r.recursos : 5;
+    } else if (h.includes('cumplimiento') || h.includes('objetivo')) {
+      val = r.cumplimientoObjetivo !== undefined ? r.cumplimientoObjetivo : 5;
+    } else if (h.includes('sugerencias para la mejora') || (tipo === 'evaluacion_encargados' && h.includes('sugerencia'))) {
+      val = ev.comentarios || r.sugerencias || '';
+    }
+    // Formulario 2: Satisfacción
+    else if (h.includes('oferta de actividades') || h.includes('variada')) {
+      val = r.ofertaVariada !== undefined ? r.ofertaVariada : 5;
+    } else if (h.includes('evaluación física') || h.includes('programas de evaluación') || h.includes('nutrición')) {
+      val = r.programasSaludOrganizados !== undefined ? r.programasSaludOrganizados : 5;
+    } else if (h.includes('difunde') || h.includes('oportunidad los calendarios') || h.includes('convocatorias')) {
+      val = r.difusionOportuna !== undefined ? r.difusionOportuna : 5;
+    } else if (h.includes('capacidad de cupos') || h.includes('cupos')) {
+      val = r.capacidadCuposSuficiente !== undefined ? r.capacidadCuposSuficiente : 5;
+    } else if (h.includes('limpieza e higiene') || h.includes('óptimas condiciones de limpieza') || h.includes('sanitarios')) {
+      val = r.mantenimientoLimpieza !== undefined ? r.mantenimientoLimpieza : 5;
+    } else if (h.includes('mantenimiento preventivo') || h.includes('reemplazo oportuno')) {
+      val = r.mantenimientoPreventivo !== undefined ? r.mantenimientoPreventivo : 5;
+    } else if (h.includes('iluminación') || h.includes('ventilación') || h.includes('señalización')) {
+      val = r.iluminacionVentilacion !== undefined ? r.iluminacionVentilacion : 5;
+    } else if (h.includes('adaptaciones') || h.includes('movilidad reducida') || h.includes('accesos cuentan')) {
+      val = r.accesibilidadInclusiva !== undefined ? r.accesibilidadInclusiva : 5;
+    } else if (h.includes('amable') || h.includes('atención amable') || h.includes('respetuosa')) {
+      val = r.atencionPersonal !== undefined ? r.atencionPersonal : 5;
+    } else if (h.includes('trámites') || h.includes('tramites') || h.includes('ágiles y sencillos')) {
+      val = r.tramitesAgiles !== undefined ? r.tramitesAgiles : 5;
+    } else if (h.includes('reglamentos y requisitos') || h.includes('información sobre reglamentos') || h.includes('clara, transparente')) {
+      val = r.informacionClara !== undefined ? r.informacionClara : 5;
+    } else if (h.includes('canales de comunicación') || h.includes('cartelera, avisos') || h.includes('redes')) {
+      val = r.canalesComunicacion !== undefined ? r.canalesComunicacion : 5;
+    } else if (h.includes('dudas, sugerencias o inconformidades') || h.includes('inconformidades') || h.includes('seguimiento oportuno')) {
+      val = r.resolucionInconformidades !== undefined ? r.resolucionInconformidades : 5;
+    } else if (h.includes('salud integral') || h.includes('promueve activamente la salud') || h.includes('autocuidado')) {
+      val = r.promocionSaludBienestar !== undefined ? r.promocionSaludBienestar : 5;
+    } else if (h.includes('nivel de satisfacción') || h.includes('satisfacción con los servicios')) {
+      val = r.satisfaccionGeneral !== undefined ? r.satisfaccionGeneral : 5;
+    } else if (h.includes('fortalezas') || h.includes('aspectos o fortalezas')) {
+      val = r.fortalezas || '';
+    } else if (h.includes('sugerencias o áreas de mejora') || h.includes('áreas de mejora') || (tipo === 'satisfaccion_servicios' && h.includes('sugerencia'))) {
+      val = r.sugerencias || '';
+    }
+    // Formulario 3: Bienestar
+    else if (h.includes('vida activa') || h.includes('rutina diaria')) {
+      val = r.vidaActiva !== undefined ? r.vidaActiva : 5;
+    } else if (h.includes('descanso y energía') || h.includes('sueño') || h.includes('descanso')) {
+      val = r.descansoEnergia !== undefined ? r.descansoEnergia : 5;
+    } else if (h.includes('alimentación') || h.includes('hidratación')) {
+      val = r.alimentacionHidratacion !== undefined ? r.alimentacionHidratacion : 5;
+    } else if (h.includes('estrés') || h.includes('agotamiento')) {
+      val = r.controlEstres !== undefined ? r.controlEstres : 5;
+    } else if (h.includes('vitalidad') || h.includes('balance personal')) {
+      val = r.vitalidadBalance !== undefined ? r.vitalidadBalance : 5;
+    } else if (h.includes('ánimo') || h.includes('florecimiento')) {
+      val = r.estadoAnimo !== undefined ? r.estadoAnimo : 5;
+    } else if (h.includes('pertenencia') || h.includes('integrado y respaldado')) {
+      val = r.sentidoPertenencia !== undefined ? r.sentidoPertenencia : 5;
+    } else if (h.includes('convivencia pacífica') || h.includes('respeto, juego limpio') || h.includes('libre de violencia')) {
+      val = r.convivenciaRespeto !== undefined ? r.convivenciaRespeto : 5;
+    } else if (h.includes('satisfacción departamental') || h.includes('calidad de vida universitaria')) {
+      val = r.satisfaccionDepartamental !== undefined ? r.satisfaccionDepartamental : 5;
+    } else if (h.includes('recomendación institucional') || h.includes('recomendaría a otros compañeros')) {
+      val = r.recomendacionInstitucional !== undefined ? r.recomendacionInstitucional : 5;
+    } else {
+      val = '';
+    }
+
+    fila.push(val);
+  }
+  return fila;
+}
+
 function doGet(e) {
   try {
     var action = (e && e.parameter) ? e.parameter.action : '';
@@ -3579,16 +3871,25 @@ function doGet(e) {
       } catch (errPost) {}
     }
 
+    var ss = msb_getSpreadsheet();
+
     if (action === 'ping') {
+      var hojasPing = [];
+      try {
+        if (ss) {
+          hojasPing = ss.getSheets().map(function(s) {
+            return { nombre: s.getName(), filas: s.getLastRow(), columnas: s.getLastColumn() };
+          });
+        }
+      } catch (errP) {}
       return ContentService.createTextOutput(JSON.stringify({ 
         ok: true, 
-        mensaje: 'Conectado a ${CONFIG.DENOMINACION_BASE_MAESTRA}',
-        spreadsheetId: '${CONFIG.MASTER_SPREADSHEET_ID}',
+        mensaje: 'Conectado a ' + (ss ? ss.getName() : '${CONFIG.DENOMINACION_BASE_MAESTRA}'),
+        spreadsheetId: ss ? ss.getId() : '${CONFIG.MASTER_SPREADSHEET_ID}',
+        hojas: hojasPing,
         timestamp: new Date().toISOString()
       })).setMimeType(ContentService.MimeType.JSON);
     }
-
-    var ss = msb_getSpreadsheet();
 
     if (action === 'obtenerTodo') {
       var actHoja = msb_getHojaSegura(ss, 'Actividades', ['ID_actividad','Nombre','Descripción','Tipo','Cupo']);
@@ -3619,27 +3920,39 @@ function doGet(e) {
       var cfgList = msb_getAllObjects(cfgHoja, msb_getHeaders(cfgHoja));
       var escList = msb_getAllObjects(escHoja, msb_getHeaders(escHoja));
 
-      // Recopilar evaluaciones tanto de la hoja unificada 'Evaluaciones' como de las hojas de Google Forms vinculadas
-      var todasLasEvaluaciones = msb_getAllObjects(evHoja, msb_getHeaders(evHoja));
+      // Recopilar evaluaciones de todas las pestañas de formularios y de 'Evaluaciones' sin duplicar
+      var todasLasEvaluaciones = [];
+      var clavesEvaluaciones = {};
 
-      // Buscar hojas individuales de Google Forms en el libro
-      var hojasPosiblesForms = [
-        'Evaluacion_Encargados', 'Respuestas de formulario 1', 'Evaluación de encargados deportivos',
-        'Satisfaccion_Servicios', 'Respuestas de formulario 2', 'Formulario de satisfacción',
-        'Bienestar_Salud', 'Respuestas de formulario 3', 'Formulario bienestar'
-      ];
-
-      hojasPosiblesForms.forEach(function(nomH) {
-        try {
-          var h = ss.getSheetByName(nomH);
-          if (h && h.getLastRow() > 1) {
-            var hHeaders = msb_getHeaders(h);
-            var hRows = msb_getAllObjects(h, hHeaders);
-            hRows.forEach(function(r) {
-              todasLasEvaluaciones.push(r);
+      var todasHojasLibro = ss.getSheets();
+      todasHojasLibro.forEach(function(h) {
+        var nomH = h.getName().toLowerCase();
+        if (nomH.includes('formulario') || nomH.includes('encargado') || nomH.includes('satisfacci') || nomH.includes('bienestar')) {
+          if (h.getLastRow() > 1) {
+            var hdrs = msb_getHeaders(h);
+            var filas = msb_getAllObjects(h, hdrs);
+            filas.forEach(function(r) {
+              var idR = r.idRespuesta || r.ID || '';
+              var fechaR = r['Marca temporal'] || r.Marca_temporal || r.fechaRegistro || '';
+              var clave = (idR ? idR : (fechaR + '_' + JSON.stringify(r).substring(0, 40)));
+              if (!clavesEvaluaciones[clave]) {
+                clavesEvaluaciones[clave] = true;
+                todasLasEvaluaciones.push(r);
+              }
             });
           }
-        } catch (eH) {}
+        }
+      });
+
+      var evRowsUnificadas = msb_getAllObjects(evHoja, msb_getHeaders(evHoja));
+      evRowsUnificadas.forEach(function(r) {
+        var idR = r.idRespuesta || r.ID || '';
+        var fechaR = r.fechaRegistro || '';
+        var clave = (idR ? idR : (fechaR + '_' + JSON.stringify(r).substring(0, 40)));
+        if (!clavesEvaluaciones[clave]) {
+          clavesEvaluaciones[clave] = true;
+          todasLasEvaluaciones.push(r);
+        }
       });
 
       return ContentService.createTextOutput(JSON.stringify({
@@ -3862,18 +4175,35 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Configuración de evaluaciones y enlaces Google Forms guardados en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 8. Guardar Evaluación de Servicio (Plataforma y Formularios)
+    // 8. Guardar Evaluación de Servicio (En la Pestaña Oficial del Formulario y en Evaluaciones)
     if (action === 'guardarEvaluacion' && postData.evaluacion) {
+      var ev = postData.evaluacion;
+      var tipo = ev.tipoEncuesta || 'satisfaccion_servicios';
+      
+      // A) Localizar o crear la pestaña oficial correspondiente en la Base Maestra
+      var hojaForm = msb_encontrarHojaFormulario(ss, tipo);
+      var nombreHojaDestino = hojaForm ? hojaForm.getName() : 'Evaluaciones';
+      if (hojaForm) {
+        var hHeaders = msb_getHeaders(hojaForm);
+        if (!hHeaders || hHeaders.length === 0) {
+          var encOficiales = msb_obtenerEncabezadosOficialesPorTipo(tipo);
+          hojaForm.appendRow(encOficiales);
+          hHeaders = encOficiales;
+        }
+        var filaFormValores = msb_construirFilaEvaluacion(tipo, ev, hHeaders);
+        hojaForm.appendRow(filaFormValores);
+      }
+
+      // B) Respaldar en la pestaña general 'Evaluaciones' para control e indexación unificada
       var evHoja = msb_getHojaSegura(ss, 'Evaluaciones', [
         'idRespuesta','tipoEncuesta','tituloEncuesta','idActividad','nombreActividad',
         'sector','puntuacionPromedio','respuestas_json','comentarios','fechaRegistro','idUsuario','nombreUsuario'
       ]);
-      var ev = postData.evaluacion;
       var filaEv = msb_buscarFilaPorValor(evHoja, 1, ev.idRespuesta);
       var ahoraEv = Utilities.formatDate(new Date(), "America/Monterrey", "yyyy-MM-dd HH:mm:ss");
       var filaEvValores = [
         ev.idRespuesta || ('ENC-' + new Date().getTime()),
-        ev.tipoEncuesta || 'satisfaccion_servicios',
+        tipo,
         ev.tituloEncuesta || 'Evaluación del Departamento',
         ev.idActividad || 'GENERAL',
         ev.nombreActividad || 'Departamento de Deporte y Salud',
@@ -3890,7 +4220,12 @@ function doPost(e) {
       } else {
         evHoja.appendRow(filaEvValores);
       }
-      return ContentService.createTextOutput(JSON.stringify({ ok: true, mensaje: 'Evaluación sincronizada en Base Maestra' })).setMimeType(ContentService.MimeType.JSON);
+
+      return ContentService.createTextOutput(JSON.stringify({ 
+        ok: true, 
+        mensaje: 'Evaluación registrada exitosamente en pestaña [' + nombreHojaDestino + '] de la Base Maestra',
+        pestaña: nombreHojaDestino
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
     // 9. Guardar Pruebas Físicas
